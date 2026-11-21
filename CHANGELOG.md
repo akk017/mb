@@ -1,0 +1,62 @@
+# Changelog
+
+- T0.1 Project setup: SwiftPM package (macOS 26, Swift 6) with GRDB + KeyboardShortcuts, app/core/UI/test targets, `make test` (xcodebuild, or `swift test` + CLT workaround).
+- T0.2 AppPaths: resolves Application Support/MiniBrain, brain.db, blobs/ with injectable base dir.
+- T1.1 Schema v1 migration: items, tags, item_tags, items_fts (+ sync triggers), enrichment_queue; WAL, foreign keys on.
+- T1.2 Item model + ItemRepository CRUD with JSON `meta` and clock-driven `updated_at`.
+- T1.3 Tags: case-insensitive unique names, attach/detach/rename, auto-delete unused tags.
+- T1.4 FTS sync via triggers for item edits, deletes, tag attach/detach/rename.
+- T1.5 Trash/restore and 30-day purge that removes unreferenced blobs.
+- T2.1 BlobStore: SHA-256 content-addressed storage, dedupe, delete-if-unreferenced.
+- T2.2 TypeDetector: CapturePayload → type (PDF > image > URL > HTML > text), HTML source URL, URL-only text → link.
+- T2.3 CaptureService: payload → blob + item + FTS + queue rows atomically; orphan-blob cleanup; paste path = drop path.
+- T3.1 QueryParser: words, phrases, type:/tag:/after:/before:/color:/meta.key<op>value → AST.
+- T3.2 SearchSQLBuilder: AST → parameterized SQL, quoted FTS terms, AND-combined filters.
+- T3.3 SearchService: bm25-weighted ranking, prefix match, `<mark>` snippets; 10k-item search < 50 ms.
+- T4.1 Menu-bar app (MenuBarExtra, no Dock icon) with ⌘⇧Space / ⌘⇧B hotkeys toggling AppState (KeyboardShortcuts, Carbon fallback).
+- T4.2 Drop box: non-activating floating NSPanel on all Spaces/full screen; DropBoxViewModel states; NSItemProvider → CapturePayload per UTType.
+- T4.3 Library window: debounced search, filter sidebar → query string, grid with highlighted snippets, detail editor for title/note/tags, empty states.
+- T4.4 Item actions: open, reveal in Finder, copy (per type), trash via injectable Workspace/Pasteboard protocols.
+- T5.1 Enrichment queue: actor worker, exponential-backoff retries, max attempts, resumes after restart, capture never blocks.
+- T5.2 PDF text extraction (PDFKit) with page count; empty/encrypted PDFs handled.
+- T5.3 OCR via Vision text recognition; blank images yield empty text.
+- T5.4 Dominant colors via Core Image: top-3 named buckets + hex in `meta`, searchable with `color:`.
+- T6.1 Tagger protocol + Foundation Models tagger (Generable schema: tags, category, colors, price, summary), validation, keyword fallback.
+- T6.2 Image tagging: ModelManager (on-demand load, shared concurrent load, 5-min idle unload), VLM tagger (MLX Qwen2.5-VL opt-in), Vision fallback.
+- T6.3 Tag merge: AI tags `source=ai`, user tags win, removed AI tags suppressed on re-enrich.
+- T7.1 sqlite-vec v0.1.6 compiled in; `vec_items` (migration v2) with cosine KNN; v1 → v2 keeps data.
+- T7.2 Embedder protocol + NLContextualEmbedding (mean-pooled, normalized, 512-d); embeddings queued via the worker.
+- T7.3 Hybrid search: FTS + vector lists fused with RRF (k=60), filters applied to both.
+- T7.4 Related items: nearest neighbors excluding self and trashed items.
+- T8.1 Natural-language query: Foundation Models → validated AST, plain-FTS fallback on invalid output; SmartSearch routing.
+- T8.2 Release: `make app` / `make dmg`, README, full suite green in Release, existing v1 library opens without data loss.
+- A1 Drop box pops up automatically near the cursor when a drag starts in any app (drag-pasteboard watcher), auto-hides after release/drop; menu toggle.
+- A2 Drop box opens at a fixed, user-chosen spot (9 positions). Settings window: position, drag toggle, editable shortcuts (live re-register, conflict checks), storage location (reveal, change with copy + relaunch, reset).
+- A3 Images shown whole (fit, no cropping) in grid and detail.
+- A4 Custom types (schema v3): user-defined types with Text / Large Text / Web Link fields; ⇧-drop to choose a type and fill fields in the drop box; Settings › Types editor; library sidebar filter, card badge, detail field editors with clickable links; `type:<name>` search; field values full-text indexed.
+- A5 Library redesign: solid (non-glass) sidebar with search, gallery cards with colored tag chips + host/path URL, property panel with inline editing (title, tags picker, type, note, custom fields, clickable links, add a property) and large preview; hidden title bar; cached downsampled thumbnails.
+- A6 Drop box type zones: one drop target per custom type ("Save to type"), drop → saved into type → field form; solid styling; ⇧ read from system key state (sampled during hover) for the chooser fallback.
+- A7 Tags show full text on a single horizontally scrollable line in cards and the item panel.
+- A8 OCR options in Settings › General: turn text recognition on/off, show/hide recognized text in the library (hidden by default), remove recognized text from saved images.
+- Fix: crash when embedding items with >2000 characters (string index out of bounds in ContextualEmbedder); interrupted jobs now count as attempts so a crashing job can't loop on every launch.
+- Fix: gallery cards all have the same height (fixed title/tags/info slots, top-aligned rows).
+- A9 Paste into the drop box: panel handles ⌘V itself (menu-bar apps have no Edit menu) + Paste button; Esc closes.
+- A10 Multi-select: ⌘-click toggle, ⇧-click range, ⌘A, Esc, ⌫; multi-selection panel with bulk tag / type / trash.
+- A11 Collapsible sidebar sections (Types, Tags, Colors), remembered across launches.
+- A12 Link previews: new `link_preview` job (LinkPresentation) stores the page image + title; existing links backfilled; Settings toggle (only feature using the internet).
+- A13 Theme rebuilt from colors-firefox-dev.json (gray ramp, cyan/blue accent, OKLCH tag hues via OKLCH→sRGB).
+- A14 Lucide icon set (ISC, bundled SVGs as template images) replaces SF Symbols in the library, drop box and settings.
+- Fix: ⌘, opens Settings from the library window and drop box; sidebar rows aligned to the search field width.
+- Fix: ⌘A / Esc / ⌫ no longer act on library items while typing in search or any field (⌫ could trash items); search box shows rotating example queries.
+- Fix: menu-bar menu shows the shortcuts set in Settings › Shortcuts (was hard-coded).
+- Search autocomplete: completes tag:, type:, color: values and filter keywords; ↑/↓, Tab/Return, Esc, click.
+- Fix: drop-box field form uses one custom input style; focus border drawn inside the field (no clipped system ring), Desc scrollbar track hidden.
+- Fix: clicking outside a text field ends editing (search no longer keeps focus); Esc leaves search.
+- ⌘⌫ moves selected items to Trash (plain ⌫ no longer deletes items).
+- Menu-bar icon from brain-4-line.svg (template); app icon MiniBrain-BlueMesh.icns; Dock icon shown while Library/Settings is open.
+- Tests: UserDefaults suites now live in the temp dir (previously leaked plists into ~/Library/Preferences).
+- Show in Dock setting (Always — default / While a window is open / Never); clicking the Dock icon opens the Library.
+- Auto-tag every drop: Settings toggle, menu-bar toggle, and drop-box Off|On switch (← Off, → On, Return toggles); off skips AI/image tagging for new drops and queued jobs.
+- `make install`: installs the fresh build to /Applications, ejects old MiniBrain disk images, relaunches.
+- Delete a tag from the sidebar (right-click → Delete Tag…, with confirmation): removed from all items, items kept, AI won't re-add it.
+- Right-hand detail panel is resizable (drag its edge; double-click resets); width is saved and restored on reopen/relaunch.
