@@ -190,6 +190,15 @@ struct GeneralSettingsTab: View {
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Picker("Theme", selection: $preferences.appearance) {
+                    ForEach(AppAppearance.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                LabeledContent("Accent") {
+                    AccentPicker(selection: $preferences.accentColor)
+                }
+            }
             Section("App") {
                 Picker("Show in Dock", selection: $preferences.dockMode) {
                     ForEach(DockMode.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -244,6 +253,7 @@ struct GeneralSettingsTab: View {
         .onChange(of: preferences.dropBoxPosition) { onPositionChange() }
         .onChange(of: preferences.showRecognizedText) { onRecognizedTextVisibilityChange() }
         .onChange(of: preferences.dockMode) { onDockModeChange() }
+        .onChange(of: preferences.appearance) { NSApp.appearance = preferences.appearance.nsAppearance }
         .confirmationDialog("Remove recognized text from all saved images?", isPresented: $confirmClear) {
             Button("Remove Text", role: .destructive) {
                 do {
@@ -255,6 +265,45 @@ struct GeneralSettingsTab: View {
             }
         } message: {
             Text("The images stay; only the text read from them is deleted, so it no longer appears in search.")
+        }
+    }
+}
+
+/// Row of swatches: Default, the nine json hues, and macOS.
+struct AccentPicker: View {
+    @Binding var selection: AccentChoice
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(AccentChoice.allCases, id: \.self) { choice in
+                let selected = choice == selection
+                Button { selection = choice } label: {
+                    swatch(choice)
+                        .frame(width: 18, height: 18)
+                        .overlay(Circle().strokeBorder(Theme.primary.opacity(selected ? 0.9 : 0), lineWidth: 2).padding(-3))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(choice.title)
+                .accessibilityLabel("\(choice.title) accent")
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    @ViewBuilder
+    private func swatch(_ choice: AccentChoice) -> some View {
+        switch choice {
+        case .system:
+            Circle().fill(AngularGradient(colors: [.red, .orange, .yellow, .green, .blue, .purple, .red], center: .center))
+        case .jsonDefault:
+            // Split swatch: the json default differs between light and dark.
+            Circle().fill(Color(nsColor: choice.nsColor(dark: false)))
+                .overlay(Circle().trim(from: 0, to: 0.5).fill(Color(nsColor: choice.nsColor(dark: true))).rotationEffect(.degrees(-45)))
+        default:
+            Circle().fill(Color(nsColor: choice.nsColor(dark: scheme == .dark)))
         }
     }
 }

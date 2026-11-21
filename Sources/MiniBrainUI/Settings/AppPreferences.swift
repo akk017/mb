@@ -178,6 +178,8 @@ public final class AppPreferences {
         public static let linkPreviews = "linkPreviews"
         public static let autoTag = "autoTag"
         public static let optimizeImages = "optimizeImages"
+        public static let appearance = "appearance"
+        public static let accentColor = "accentColor"
         public static let dockMode = "dockMode"
         public static func shortcut(_ hotkey: Hotkey) -> String { "shortcut.\(hotkey.rawValue)" }
     }
@@ -210,6 +212,17 @@ public final class AppPreferences {
     public var optimizeImages: Bool {
         didSet { defaults.set(optimizeImages, forKey: Keys.optimizeImages) }
     }
+    /// System / Light / Dark.
+    public var appearance: AppAppearance {
+        didSet { defaults.set(appearance.rawValue, forKey: Keys.appearance) }
+    }
+    /// Accent color choice.
+    public var accentColor: AccentChoice {
+        didSet {
+            defaults.set(accentColor.rawValue, forKey: Keys.accentColor)
+            Theme.accentChoice = accentColor
+        }
+    }
     /// When MiniBrain shows an icon in the Dock.
     public var dockMode: DockMode {
         didSet { defaults.set(dockMode.rawValue, forKey: Keys.dockMode) }
@@ -231,6 +244,8 @@ public final class AppPreferences {
         linkPreviews = defaults.object(forKey: Keys.linkPreviews) as? Bool ?? true
         autoTag = defaults.object(forKey: Keys.autoTag) as? Bool ?? true
         optimizeImages = defaults.object(forKey: Keys.optimizeImages) as? Bool ?? true
+        appearance = defaults.string(forKey: Keys.appearance).flatMap(AppAppearance.init(rawValue:)) ?? .system
+        accentColor = defaults.string(forKey: Keys.accentColor).flatMap(AccentChoice.init(rawValue:)) ?? .jsonDefault
         dockMode = defaults.string(forKey: Keys.dockMode).flatMap(DockMode.init(rawValue:)) ?? .always
         for hotkey in Hotkey.allCases {
             let key = Keys.shortcut(hotkey)

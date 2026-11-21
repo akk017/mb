@@ -7,16 +7,19 @@ public struct LibraryView: View {
     @Bindable var model: LibraryViewModel
     let actions: ItemActions
     let openSettings: () -> Void
-    /// Saved detail-panel width (restored on reopen / relaunch).
-    @AppStorage(DetailPanelWidth.defaultsKey) private var panelWidth = DetailPanelWidth.standard
-    /// Width while dragging (saved to `panelWidth` when the drag ends).
-    @State private var liveWidth: Double?
-    @State private var windowWidth: Double = 1320
+    /// Live drag width + window width. Kept out of this view's own state so
+    /// dragging the panel edge doesn't rebuild the sidebar and gallery.
+    @State private var layout: PanelLayout
 
     public init(model: LibraryViewModel, actions: ItemActions, openSettings: @escaping () -> Void = {}) {
+        self.init(model: model, actions: actions, openSettings: openSettings, layout: PanelLayout())
+    }
+
+    init(model: LibraryViewModel, actions: ItemActions, openSettings: @escaping () -> Void = {}, layout: PanelLayout) {
         self.model = model
         self.actions = actions
         self.openSettings = openSettings
+        _layout = State(initialValue: layout)
     }
 
     public var body: some View {
@@ -27,8 +30,7 @@ public struct LibraryView: View {
             GalleryView(model: model, actions: actions)
                 .frame(minWidth: DetailPanelWidth.minimumGallery, maxWidth: .infinity)
             if model.isMultiSelection || model.selectedItem != nil {
-                PanelResizeHandle(width: $panelWidth, liveWidth: $liveWidth, availableWidth: windowWidth)
-                Group {
+                DetailPanelContainer(layout: layout) {
                     if model.isMultiSelection {
                         MultiSelectionPanel(model: model, actions: actions)
                     } else if let item = model.selectedItem {
@@ -36,14 +38,13 @@ public struct LibraryView: View {
                             .id(item.id)
                     }
                 }
-                .frame(width: DetailPanelWidth.clamp(liveWidth ?? panelWidth, windowWidth: windowWidth))
                 .transition(.move(edge: .trailing))
             }
         }
         .background(GeometryReader { geo in
             Color.clear
-                .onAppear { windowWidth = geo.size.width }
-                .onChange(of: geo.size.width) { _, w in windowWidth = w }
+                .onAppear { layout.windowWidth = geo.size.width }
+                .onChange(of: geo.size.width) { _, w in layout.windowWidth = w }
         })
         .background(Theme.content)
         .foregroundStyle(Theme.primary)
@@ -81,45 +82,106 @@ enum DetailPanelWidth {
     }
 }
 
+private struct IsResizingPanelKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True while the detail panel edge is being dragged (cheaper rendering).
+    /// (Written by hand: the `@Entry` macro plugin ships only with Xcode.)
+    var isResizingPanel: Bool {
+        get { self[IsResizingPanelKey.self] }
+        set { self[IsResizingPanelKey.self] = newValue }
+    }
+}
+
+/// Large preview in the detail panel; uses cheaper scaling while resizing.
+struct PanelPreviewImage: View {
+    let image: NSImage
+    @Environment(\.isResizingPanel) private var resizing
+
+    var body: some View {
+        Image(nsImage: image)
+            .resizable()
+            .interpolation(resizing ? .medium : .high)
+            .scaledToFit()
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+/// Drag state for the detail panel, observed only by its container.
+@MainActor
+@Observable
+final class PanelLayout {
+    /// Width while dragging (nil when not dragging).
+    var liveWidth: Double?
+    var windowWidth: Double = 1320
+}
+
+/// Handle + panel content at the saved/live width. Only this view re-renders
+/// while the edge is dragged.
+struct DetailPanelContainer<Content: View>: View {
+    let layout: PanelLayout
+    @ViewBuilder var content: Content
+    /// Saved width (restored on reopen / relaunch).
+    @AppStorage(DetailPanelWidth.defaultsKey) private var savedWidth = DetailPanelWidth.standard
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Theme.divider.frame(width: 1)
+            content
+                .frame(width: DetailPanelWidth.clamp(layout.liveWidth ?? savedWidth, windowWidth: layout.windowWidth))
+                .transaction { if layout.liveWidth != nil { $0.disablesAnimations = true } }
+                .environment(\.isResizingPanel, layout.liveWidth != nil)
+        }
+        // Grab area sits on top of everything, centred on the divider.
+        .overlay(alignment: .leading) {
+            PanelResizeHandle(width: $savedWidth, layout: layout)
+                .offset(x: -5)
+        }
+    }
+}
+
 /// Draggable leading edge of the detail panel: 1px divider, 9pt grab area,
 /// resize cursor; double-click restores the default width.
 struct PanelResizeHandle: View {
     @Binding var width: Double
-    @Binding var liveWidth: Double?
-    let availableWidth: Double
+    let layout: PanelLayout
     @State private var dragStart: Double?
     @State private var hovering = false
 
     var body: some View {
-        Rectangle()
-            .fill(hovering || dragStart != nil ? Theme.accent : Theme.divider)
-            .frame(width: hovering || dragStart != nil ? 2 : 1)
-            .frame(width: 1)
-            .overlay {
-                Color.clear
-                    .frame(width: 9)
-                    .contentShape(Rectangle())
-                    .onHover { inside in
-                        hovering = inside
-                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-                    }
-                    .gesture(
-                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                            .onChanged { value in
-                                let start = dragStart ?? DetailPanelWidth.clamp(width, windowWidth: availableWidth)
-                                dragStart = start
-                                // Dragging left widens the panel.
-                                liveWidth = DetailPanelWidth.clamp(start - value.translation.width, windowWidth: availableWidth)
-                            }
-                            .onEnded { _ in
-                                if let liveWidth { width = liveWidth } // persist
-                                liveWidth = nil
-                                dragStart = nil
-                            })
-                    .onTapGesture(count: 2) { width = DetailPanelWidth.standard }
-                    .help("Drag to resize · double-click to reset")
-            }
-            .zIndex(1)
+        ZStack {
+            // Accent line while hovered/dragged (the 1px divider is drawn by the container).
+            Rectangle()
+                .fill(Theme.accent)
+                .frame(width: 2)
+                .opacity(hovering || dragStart != nil ? 1 : 0)
+        }
+        .frame(width: 11)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            hovering = inside
+            if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { value in
+                    let start = dragStart ?? DetailPanelWidth.clamp(width, windowWidth: layout.windowWidth)
+                    dragStart = start
+                    // Dragging left widens the panel.
+                    let next = DetailPanelWidth.clamp(start - value.translation.width, windowWidth: layout.windowWidth)
+                    if next != layout.liveWidth { layout.liveWidth = next }
+                }
+                .onEnded { _ in
+                    if let live = layout.liveWidth { width = live } // persist
+                    layout.liveWidth = nil
+                    dragStart = nil
+                })
+        .onTapGesture(count: 2) { width = DetailPanelWidth.standard }
+        .help("Drag to resize · double-click to reset")
     }
 }
 
@@ -616,7 +678,9 @@ struct GalleryCard: View {
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
             .strokeBorder(selected ? Theme.accent : (hovering ? Theme.selectedRow : Theme.cardBorder),
                           lineWidth: selected ? 2 : 1))
-        .shadow(color: .black.opacity(hovering ? 0.18 : 0.08), radius: hovering ? 6 : 2, y: 1)
+        // Shadow only on hover: per-card shadows are re-rendered offscreen
+        // on every layout pass and make resizing stutter.
+        .shadow(color: .black.opacity(hovering ? 0.18 : 0), radius: hovering ? 6 : 0, y: 1)
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .onHover { hovering = $0 }
     }
@@ -826,7 +890,7 @@ struct ItemPropertiesPanel: View {
                     .onTapGesture { showTagEditor = true }
             } else {
                 // Single line; scroll sideways for more. Click opens the editor.
-                ScrollingChipRow(names: tags.map(\.name))
+                ScrollingChipRow(names: tags.map(\.name), fadeColor: Theme.panel)
                     .onTapGesture { showTagEditor = true }
                 Button { showTagEditor = true } label: { Icon(.plus, size: 14) }
                     .buttonStyle(.plain)
@@ -913,37 +977,24 @@ struct ItemPropertiesPanel: View {
     private var preview: some View {
         switch item.type {
         case .image, .pdf:
-            if let url = actions.fileURL(for: item), let image = ThumbnailCache.image(for: url, type: item.type, maxPixel: 1600) {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            if let url = actions.fileURL(for: item), let image = ThumbnailCache.image(for: url, type: item.type, maxPixel: 1200) {
+                PanelPreviewImage(image: image)
                     .onTapGesture(count: 2) { actions.open(item) }
             }
-            if item.type == .image {
-                if model.showsRecognizedText, !item.content.isEmpty {
-                    Text("Recognized Text")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.secondary)
-                        .padding(.top, 18)
-                    contentText.padding(.top, -6)
-                }
-            } else if !item.content.isEmpty {
-                contentText
+            // Extracted text (PDF text, OCR) stays searchable but isn't shown
+            // here — except OCR when enabled in Settings.
+            if item.type == .image, model.showsRecognizedText, !item.content.isEmpty {
+                Text("Recognized Text")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.secondary)
+                    .padding(.top, 18)
+                contentText.padding(.top, -6)
             }
         case .link:
-            if let url = actions.previewURL(for: item), let image = ThumbnailCache.image(for: url, type: .image, maxPixel: 1600) {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            if let url = actions.previewURL(for: item), let image = ThumbnailCache.image(for: url, type: .image, maxPixel: 1200) {
+                PanelPreviewImage(image: image)
                     .onTapGesture(count: 2) { actions.open(item) }
             }
-            if !item.content.isEmpty { contentText }
         case .text:
             if !item.content.isEmpty { contentText }
         }

@@ -30,7 +30,7 @@ the shipping MiniBrain code. Reuse it to build a new app that feels the same.
 ## 2. Color
 
 Source: Firefox Developer Edition tokens (`colors-firefox-dev.json`). Grays are
-hex. Hues are OKLCH, converted to sRGB at runtime (see §2.5).
+hex. Hues are OKLCH, converted to sRGB at runtime (see §2.6).
 
 ### 2.1 Gray ramp
 
@@ -46,33 +46,71 @@ hex. Hues are OKLCH, converted to sRGB at runtime (see §2.5).
 | gray-90 | `#1C1B22` |
 | gray-100 | `#15141A` |
 
-### 2.2 Semantic tokens
+### 2.2 Blue-grey ramp (matches the logo)
+
+The app is tuned to the blue-grey logo (hue ~205–210°). The Firefox gray ramp
+above is violet-tinted, so surfaces use **`gray-30` `#BAC2CA`** (the json's
+blue-grey neutral, hue 210) and **`blue-110` `oklch(20% .05 260)`**, layered with
+the json's `white/black alpha` tokens. Every value traces back to the json.
+
+| Name | Built from (json tokens) | Hex |
+|---|---|---|
+| slate-50 | white.alpha.90 over gray-30 | `#F8F9FA` |
+| slate-100 | white.alpha.80 over gray-30 | `#F1F3F4` |
+| slate-150 | white.alpha.70 over gray-30 | `#EAEDEF` |
+| slate-250 | white.alpha.50 over gray-30 | `#DCE0E4` |
+| slate-600 | black.alpha.30 over gray-30 | `#82888D` |
+| slate-700 | black.alpha.50 over gray-30 | `#5D6165` |
+| ink-800 | blue-110 + white.alpha.20 | `#394456` |
+| ink-850 | blue-110 + white.alpha.10 | `#212D41` |
+| ink-900 | ink-850 + black.alpha.30 | `#171F2E` |
+
+### 2.3 Semantic tokens
 
 | Token | Light | Dark | Used for |
 |---|---|---|---|
-| `sidebar` | gray-20 | gray-90 | Sidebar background |
-| `content` | gray-0 | gray-100 | Main content / gallery background |
-| `panel` | gray-0 | gray-90 | Detail panel, popovers, floating panel |
-| `card` | `#FFFFFF` | gray-80 | Cards, dropdown menus |
+| `sidebar` | slate-150 | ink-850 | Sidebar background |
+| `content` | slate-50 | ink-900 | Main content / gallery background |
+| `panel` | slate-50 | ink-850 | Detail panel, popovers, floating panel |
+| `card` | white | ink-850 | Cards, dropdown menus |
 | `cardBorder` | black 10% | white 10% | 1px card outline |
-| `thumbBackground` | gray-20 | gray-90 | Letterbox behind images |
+| `thumbBackground` | slate-100 | ink-900 | Letterbox behind images |
 | `hover` | black 5% | white 6% | Row/value hover fill |
 | `selectedRow` | black 10% | white 10% | Selected sidebar row, list highlight |
 | `divider` | black 10% | white 10% | 1px separators, field borders |
-| `field` | black 5% | white 10% | Text-field and search fill, chip-key backgrounds |
-| `primary` | gray-100 | gray-0 | Main text, icons on emphasis |
-| `secondary` | gray-70 | gray-50 | Labels, property names, secondary icons |
-| `tertiary` | gray-60 | gray-60 | Placeholders, "Empty", hints, counts |
-| `accent` | blue-60 `oklch(55% .24 260)` = `#0062FA` | cyan-30 `oklch(76% .14 205)` = `#00CADB` | Selection border, focus ring, active segment, tint |
-| `onAccent` | `#FFFFFF` | gray-100 | Text on an accent fill |
+| `field` | black 5% | white 10% | Text-field / search fill |
+| `primary` | ink-850 | gray-0 `#FBFBFE` | Main text |
+| `secondary` | slate-700 | **gray-30** `#BAC2CA` | Labels, property names, secondary icons |
+| `tertiary` | slate-600 | white.alpha.40 over ink-900 | Placeholders, "Empty", hints |
+| `accent` | blue-60 `#0062FA` | cyan-30 `#00CADB` | json `accent.primary` — selection, focus, tint |
+| `onAccent` | white | ink-900 | Text on accent fill |
 | `attention` | `#2AC3A2` | `#54FFBD` | Success ("Saved") |
+| tag gray (palette #0) | slate-250 / ink-850 text | ink-800 / gray-0 text | Neutral chips, badges |
 
 Rules:
 - Selection is shown with an **accent border** (2px on cards, 1.5px on fields), never an accent fill on large surfaces.
 - Destructive actions use the system destructive role (red), not a custom color.
 - Errors and warnings use system orange text.
 
-### 2.3 Tag palette (10 entries)
+### 2.3a Theme & accent (user settings)
+
+- **Theme:** System (default) · Light · Dark, applied app-wide via `NSApp.appearance`. All tokens are dynamic, so they follow it.
+- **Accent:** Default · the 9 json hues · macOS. Each hue uses the json's own
+  `accent.primary` rule: **step 60 in light, step 30 in dark** (yellow uses step 70 in light for
+  contrast with white text). Default = blue-60 / cyan-30. macOS = `NSColor.controlAccentColor`.
+- **Changing it:** the change applies live. Window roots are wrapped in `ThemedRoot`, which re-creates content keyed by
+  the accent and sets `.tint(Theme.accent)`.
+- **What stays fixed:** tag colors don't follow the accent; they stay tied to tag names.
+
+| Accent | Light (json step) | Dark (json step) |
+|---|---|---|
+| Default | blue.60 | cyan.30 |
+| Red / Orange / Green / Cyan / Purple / Pink | `<hue>`.60 | `<hue>`.30 |
+| Yellow | yellow.70 | yellow.30 |
+| Blue / Violet | `<hue>`.60 | `<hue>`.30 |
+| macOS | system accent | system accent |
+
+### 2.4 Tag palette (10 entries)
 
 Index 0 is neutral gray. Indexes 1–9 are hues from the json OKLCH ramps.
 - **Light mode:** background = step 10 `oklch(90% .10 h)`, text = step 80 `oklch(41% .17 h)`.
@@ -80,7 +118,7 @@ Index 0 is neutral gray. Indexes 1–9 are hues from the json OKLCH ramps.
 
 | # | Hue | h | Light bg | Light text | Dark bg | Dark text |
 |---|---|---|---|---|---|---|
-| 0 | gray | — | gray-20 | gray-100 | gray-70 | gray-0 |
+| 0 | gray | — | slate-250 | ink-850 | ink-800 | gray-0 |
 | 1 | red | 15 | `#FFC3C9` | `#90002B` | `#6E001F` | `#FFC3C9` |
 | 2 | orange | 50 | `#FFCBA2` | `#8C1800` | `#6B1100` | `#FFCBA2` |
 | 3 | yellow | 90 | `#F8DC90` | `#6E4000` | `#542F00` | `#F8DC90` |
@@ -95,7 +133,7 @@ Index 0 is neutral gray. Indexes 1–9 are hues from the json OKLCH ramps.
 lowercased tag name, modulo 10. The same tag gets the same color everywhere, with no
 picker. Custom-type pills (drop-zone chips) use the same function on the type name.
 
-### 2.4 Swift tokens (drop-in)
+### 2.5 Swift tokens (drop-in)
 
 ```swift
 enum Theme {
@@ -104,37 +142,49 @@ enum Theme {
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
         })
     }
-    static func hex(_ v: UInt32, _ a: CGFloat = 1) -> NSColor {
+    static func hex(_ v: UInt32) -> NSColor {
         NSColor(srgbRed: CGFloat((v >> 16) & 0xFF) / 255, green: CGFloat((v >> 8) & 0xFF) / 255,
-                blue: CGFloat(v & 0xFF) / 255, alpha: a)
+                blue: CGFloat(v & 0xFF) / 255, alpha: 1)
     }
-    static func white(_ a: CGFloat) -> NSColor { NSColor(white: 1, alpha: a) }
-    static func black(_ a: CGFloat) -> NSColor { NSColor(white: 0, alpha: a) }
+    static func white(_ a: CGFloat) -> NSColor { NSColor(white: 1, alpha: a) }   // white.alpha.*
+    static func black(_ a: CGFloat) -> NSColor { NSColor(white: 0, alpha: a) }   // black.alpha.*
+    /// `top` at `alpha` over opaque `base` — how the json alpha tokens layer.
+    static func over(_ base: NSColor, _ top: NSColor, _ a: CGFloat) -> NSColor {
+        let b = base.usingColorSpace(.sRGB)!, t = top.usingColorSpace(.sRGB)!
+        return NSColor(srgbRed: b.redComponent * (1 - a) + t.redComponent * a,
+                       green: b.greenComponent * (1 - a) + t.greenComponent * a,
+                       blue: b.blueComponent * (1 - a) + t.blueComponent * a, alpha: 1)
+    }
 
-    static let gray0 = hex(0xFBFBFE), gray20 = hex(0xF0F0F4), gray50 = hex(0xBFBFC9), gray60 = hex(0x8F8F9D)
-    static let gray70 = hex(0x5B5B66), gray80 = hex(0x23222B), gray90 = hex(0x1C1B22), gray100 = hex(0x15141A)
+    static let gray0 = hex(0xFBFBFE), gray30 = hex(0xBAC2CA), white = hex(0xFFFFFF)
+    static let blue110 = OKLCH.color(20, 0.05, 260)
+    static let slate50 = over(gray30, white, 0.90), slate100 = over(gray30, white, 0.80)
+    static let slate150 = over(gray30, white, 0.70), slate250 = over(gray30, white, 0.50)
+    static let slate600 = over(gray30, black(1), 0.30), slate700 = over(gray30, black(1), 0.50)
+    static let ink800 = over(blue110, white, 0.20), ink850 = over(blue110, white, 0.10)
+    static let ink900 = over(ink850, black(1), 0.30)
 
-    static let sidebar = dynamic(light: gray20, dark: gray90)
-    static let content = dynamic(light: gray0, dark: gray100)
-    static let panel = dynamic(light: gray0, dark: gray90)
-    static let card = dynamic(light: hex(0xFFFFFF), dark: gray80)
+    static let sidebar = dynamic(light: slate150, dark: ink850)
+    static let content = dynamic(light: slate50, dark: ink900)
+    static let panel = dynamic(light: slate50, dark: ink850)
+    static let card = dynamic(light: white, dark: ink850)
     static let cardBorder = dynamic(light: black(0.10), dark: white(0.10))
-    static let thumbBackground = dynamic(light: gray20, dark: gray90)
+    static let thumbBackground = dynamic(light: slate100, dark: ink900)
     static let hover = dynamic(light: black(0.05), dark: white(0.06))
     static let selectedRow = dynamic(light: black(0.10), dark: white(0.10))
     static let divider = dynamic(light: black(0.10), dark: white(0.10))
     static let field = dynamic(light: black(0.05), dark: white(0.10))
-    static let primary = dynamic(light: gray100, dark: gray0)
-    static let secondary = dynamic(light: gray70, dark: gray50)
-    static let tertiary = dynamic(light: gray60, dark: gray60)
+    static let primary = dynamic(light: ink850, dark: gray0)
+    static let secondary = dynamic(light: slate700, dark: gray30)
+    static let tertiary = dynamic(light: slate600, dark: over(ink900, white, 0.40))
     static let accent = dynamic(light: OKLCH.color(55, 0.24, 260), dark: OKLCH.color(76, 0.14, 205))
     static let attention = dynamic(light: hex(0x2AC3A2), dark: hex(0x54FFBD))
-    static let onAccent = dynamic(light: hex(0xFFFFFF), dark: gray100)
+    static let onAccent = dynamic(light: white, dark: ink900)
 
     static let tagHues: [Double] = [15, 50, 90, 145, 205, 260, 290, 315, 360]
-    static let tagBackgrounds: [Color] = [dynamic(light: gray20, dark: gray70)]
+    static let tagBackgrounds: [Color] = [dynamic(light: slate250, dark: ink800)]
         + tagHues.map { dynamic(light: OKLCH.color(90, 0.10, $0), dark: OKLCH.color(34, 0.14, $0)) }
-    static let tagForegrounds: [Color] = [dynamic(light: gray100, dark: gray0)]
+    static let tagForegrounds: [Color] = [dynamic(light: ink850, dark: gray0)]
         + tagHues.map { dynamic(light: OKLCH.color(41, 0.17, $0), dark: OKLCH.color(90, 0.10, $0)) }
 }
 
@@ -150,7 +200,7 @@ enum TagPalette {
 Set `.tint(Theme.accent)` on every window root, so system controls (toggles,
 pickers, default buttons) pick up the accent.
 
-### 2.5 OKLCH → sRGB
+### 2.6 OKLCH → sRGB
 
 Use Björn Ottosson's OKLab math (MiniBrain's `OKLCH` enum in `LibraryTheme.swift`), then
 clamp to 0…1 and apply sRGB gamma. Reference values: `oklch(62.8% 0.2577 29.23)` ≈ pure
@@ -239,7 +289,7 @@ Always use `.continuous` (squircle) corners.
 ### 4.4 Elevation
 
 Flat by default. Only these get shadows:
-- **Cards:** shadow black 8%, radius 2, y 1. On hover: 18%, radius 6.
+- **Cards:** no shadow at rest; on hover black 18%, radius 6, y 1. (Resting per-card shadows and gradient masks render offscreen on every layout pass and make resizing stutter. Use overlays, not `.mask`, for fades.)
 - **Dropdowns:** black 25%, radius 10, y 4.
 - **Floating panel:** the system window shadow (`hasShadow = true`).
 
@@ -277,7 +327,7 @@ Flat by default. Only these get shadows:
 
 ### 5.4 Tag chip
 - **Shape:** padding 7×2.5 (regular) or 6×1.5 (small), radius 4.
-- **Colors:** background/foreground from the tag palette (§2.3).
+- **Colors:** background/foreground from the tag palette (§2.4).
 - **Text:** always the full name, never truncated inside a chip. Overflow scrolls instead.
 - **Removable variant:** a trailing × (11pt; 9pt small) in the foreground color at 70% opacity.
 

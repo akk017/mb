@@ -84,6 +84,8 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(preferences.dockMode == .always ? .regular : .accessory)
+        NSApp.appearance = preferences.appearance.nsAppearance
+        Theme.accentChoice = preferences.accentColor
         if Bundle.main.bundleURL.pathExtension != "app",
            let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns") ?? Self.devIconURL {
             NSApp.applicationIconImage = NSImage(contentsOf: url)
@@ -164,7 +166,7 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
             model.onSaved = { [weak self] _ in Task { await self?.libraryModel?.refresh() } }
             model.onOpenSettings = { [weak self] in self?.showSettings(tab: .types) }
             dropBoxModel = model
-            let panel = DropBoxPanel(content: DropBoxView(model: model))
+            let panel = DropBoxPanel(content: ThemedRoot(preferences: preferences) { DropBoxView(model: model) })
             panel.anchor = preferences.dropBoxPosition
             panel.onPaste = { [weak model] in
                 guard let model else { return }
@@ -207,8 +209,10 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
                 window.titlebarAppearsTransparent = true
                 window.isMovableByWindowBackground = false
                 window.isReleasedWhenClosed = false
-                window.contentViewController = NSHostingController(rootView: LibraryView(
-                    model: model, actions: actions, openSettings: { [weak self] in self?.showSettings() }))
+                let prefs = preferences
+                window.contentViewController = NSHostingController(rootView: ThemedRoot(preferences: prefs) {
+                    LibraryView(model: model, actions: actions, openSettings: { [weak self] in self?.showSettings() })
+                })
                 window.center()
                 window.setFrameAutosaveName("MiniBrainLibrary")
                 window.delegate = self
@@ -282,7 +286,8 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
             window.title = "MiniBrain Settings"
             window.isReleasedWhenClosed = false
             window.delegate = self
-            window.contentViewController = NSHostingController(rootView: view)
+            let prefs = preferences
+            window.contentViewController = NSHostingController(rootView: ThemedRoot(preferences: prefs) { view })
             window.center()
             settingsWindow = window
         }

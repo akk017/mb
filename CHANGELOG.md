@@ -60,3 +60,7 @@
 - `make install`: installs the fresh build to /Applications, ejects old MiniBrain disk images, relaunches.
 - Delete a tag from the sidebar (right-click → Delete Tag…, with confirmation): removed from all items, items kept, AI won't re-add it.
 - Right-hand detail panel is resizable (drag its edge; double-click resets); width is saved and restored on reopen/relaunch.
+- Detail panel no longer shows extracted text (PDF text / link page text) under the preview; it stays searchable.
+- Fix: smooth detail-panel resizing — drag only re-lays-out the panel (not sidebar/gallery), grab area on top of content, no per-card resting shadows or offscreen masks, cheaper preview scaling while dragging; perf test keeps drag frames in budget.
+- Theme: blue-grey to match the logo — surfaces from json gray-30 and blue-110 layered with json white/black alpha (replaces violet-tinted Firefox grays); accent unchanged (json accent.primary).
+- Settings › General › Appearance: Theme (System / Light / Dark) and Accent (Default, 9 json hues using json's step-60/step-30 accent rule, or macOS accent); applies live.

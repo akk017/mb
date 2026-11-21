@@ -3,8 +3,10 @@ import MiniBrainCore
 import SwiftUI
 
 /// Library palette from `colors-firefox-dev.json` (Firefox Developer
-/// Edition tokens): gray ramp for surfaces/text, cyan/blue accent, and the
-/// OKLCH hue ramps for tag colors. Solid colors only — no materials.
+/// Edition tokens), tuned to the blue-grey logo: surfaces are `gray-30`
+/// (#BAC2CA, hue 210 — the logo's hue) and `blue-110` layered with the json's
+/// `white/black alpha` tokens. Accent = json `accent.primary`. Tag colors use
+/// the json OKLCH hue ramps. Solid colors only — no materials.
 enum Theme {
     static func dynamic(light: NSColor, dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -17,45 +19,144 @@ enum Theme {
                 blue: CGFloat(value & 0xFF) / 255, alpha: alpha)
     }
 
-    // Gray ramp (json: color.gray.*)
-    static let gray0 = hex(0xFBFBFE), gray20 = hex(0xF0F0F4), gray30 = hex(0xBAC2CA), gray50 = hex(0xBFBFC9)
-    static let gray60 = hex(0x8F8F9D), gray70 = hex(0x5B5B66), gray80 = hex(0x23222B), gray90 = hex(0x1C1B22)
-    static let gray100 = hex(0x15141A)
+    // json tokens
+    static let gray0 = hex(0xFBFBFE)                          // color.gray.0
+    static let gray30 = hex(0xBAC2CA)                         // color.gray.30 — blue-grey, matches logo
+    static let white = hex(0xFFFFFF)                          // color.white.@base
+    static let blue110 = OKLCH.color(20, 0.05, 260)           // color.blue.110
     static func white(_ a: CGFloat) -> NSColor { NSColor(white: 1, alpha: a) }   // color.white.alpha.*
     static func black(_ a: CGFloat) -> NSColor { NSColor(white: 0, alpha: a) }   // color.black.alpha.*
 
-    static let sidebar = dynamic(light: gray20, dark: gray90)
-    static let content = dynamic(light: gray0, dark: gray100)
-    static let panel = dynamic(light: gray0, dark: gray90)
-    static let card = dynamic(light: hex(0xFFFFFF), dark: gray80)
+    /// `top` at `alpha` composited over opaque `base` (how alpha tokens layer).
+    static func over(_ base: NSColor, _ top: NSColor, _ alpha: CGFloat) -> NSColor {
+        let b = base.usingColorSpace(.sRGB)!, t = top.usingColorSpace(.sRGB)!
+        return NSColor(srgbRed: b.redComponent * (1 - alpha) + t.redComponent * alpha,
+                       green: b.greenComponent * (1 - alpha) + t.greenComponent * alpha,
+                       blue: b.blueComponent * (1 - alpha) + t.blueComponent * alpha, alpha: 1)
+    }
+
+    // Blue-grey ramp built from the tokens above.
+    static let slate50 = over(gray30, white, 0.90)   // #F8F9FA  white.90 over gray-30
+    static let slate100 = over(gray30, white, 0.80)  // #F1F3F4  white.80 over gray-30
+    static let slate150 = over(gray30, white, 0.70)  // #EAEDEF  white.70 over gray-30
+    static let slate250 = over(gray30, white, 0.50)  // #DCE0E4  white.50 over gray-30
+    static let slate600 = over(gray30, black(1), 0.30) // #82888D black.30 over gray-30
+    static let slate700 = over(gray30, black(1), 0.50) // #5D6165 black.50 over gray-30
+    static let ink800 = over(blue110, white, 0.20)   // #394456  blue-110 + white.20
+    static let ink850 = over(blue110, white, 0.10)   // #212D41  blue-110 + white.10
+    static let ink900 = over(ink850, black(1), 0.30) // #171F2E  (blue-110 + white.10) + black.30
+
+    static let sidebar = dynamic(light: slate150, dark: ink850)
+    static let content = dynamic(light: slate50, dark: ink900)
+    static let panel = dynamic(light: slate50, dark: ink850)
+    static let card = dynamic(light: white, dark: ink850)
     static let cardBorder = dynamic(light: black(0.10), dark: white(0.10))
-    static let thumbBackground = dynamic(light: gray20, dark: gray90)
+    static let thumbBackground = dynamic(light: slate100, dark: ink900)
     static let hover = dynamic(light: black(0.05), dark: white(0.06))
     static let selectedRow = dynamic(light: black(0.10), dark: white(0.10))
     static let divider = dynamic(light: black(0.10), dark: white(0.10))
     static let field = dynamic(light: black(0.05), dark: white(0.10))
-    static let primary = dynamic(light: gray100, dark: gray0)
-    static let secondary = dynamic(light: gray70, dark: gray50)
-    static let tertiary = dynamic(light: gray60, dark: gray60)
+    static let primary = dynamic(light: ink850, dark: gray0)
+    static let secondary = dynamic(light: slate700, dark: gray30)
+    static let tertiary = dynamic(light: slate600, dark: over(ink900, white, 0.40))
 
-    /// color.accent.primary — light: blue.60, dark: cyan.30
-    static let accent = dynamic(light: OKLCH.color(55, 0.24, 260), dark: OKLCH.color(76, 0.14, 205))
+    /// Current accent (Settings › General › Accent). Default = json
+    /// `accent.primary` (light blue.60, dark cyan.30).
+    nonisolated(unsafe) static var accentChoice: AccentChoice = .jsonDefault {
+        didSet { accentCache = accentChoice.color }
+    }
+    nonisolated(unsafe) private static var accentCache: Color = AccentChoice.jsonDefault.color
+    static var accent: Color { accentCache }
     /// color.accent.attention — used for success ("Saved").
     static let attention = dynamic(light: hex(0x2AC3A2), dark: hex(0x54FFBD))
     /// Text on an accent fill.
-    static let onAccent = dynamic(light: hex(0xFFFFFF), dark: gray100)
+    static let onAccent = dynamic(light: white, dark: ink900)
 
     /// Tag chips: (background, text) per hue. Light uses step 10 on 80,
     /// dark uses step 90 on 10 — all from the json's OKLCH ramps.
     static let tagHues: [Double] = [15, 50, 90, 145, 205, 260, 290, 315, 360] // red … pink
-    static let tagBackgrounds: [Color] = [dynamic(light: gray20, dark: gray70)] + tagHues.map { h in
-        dynamic(light: OKLCH.color(90, h == 90 ? 0.1 : 0.1, h), dark: OKLCH.color(34, 0.14, h))
+    static let tagBackgrounds: [Color] = [dynamic(light: slate250, dark: ink800)] + tagHues.map { h in
+        dynamic(light: OKLCH.color(90, 0.1, h), dark: OKLCH.color(34, 0.14, h))
     }
-    static let tagForegrounds: [Color] = [dynamic(light: gray100, dark: gray0)] + tagHues.map { h in
+    static let tagForegrounds: [Color] = [dynamic(light: ink850, dark: gray0)] + tagHues.map { h in
         dynamic(light: OKLCH.color(41, 0.17, h), dark: OKLCH.color(90, 0.1, h))
     }
     /// Neutral chip text (badges).
-    static let tagText = dynamic(light: gray100, dark: gray0)
+    static let tagText = dynamic(light: ink850, dark: gray0)
+}
+
+/// Accent options: the json default, every json hue ramp (light step 60 /
+/// dark step 30 — the rule json `accent.primary` uses), or the macOS accent.
+public enum AccentChoice: String, CaseIterable, Sendable {
+    case jsonDefault = "default"
+    case red, orange, yellow, green, cyan, blue, violet, purple, pink
+    case system
+
+    public var title: String {
+        switch self {
+        case .jsonDefault: "Default"
+        case .system: "macOS"
+        default: rawValue.capitalized
+        }
+    }
+
+    /// (light step, dark step) OKLCH values copied from colors-firefox-dev.json.
+    var oklch: (light: (Double, Double, Double), dark: (Double, Double, Double))? {
+        switch self {
+        case .jsonDefault: ((55, 0.24, 260), (76, 0.14, 205))   // blue.60 / cyan.30
+        case .red: ((55, 0.21, 15), (76, 0.17, 15))             // red.60 / red.30
+        case .orange: ((58, 0.21, 50), (79, 0.17, 50))          // orange.60 / .30
+        case .yellow: ((51, 0.23, 90), (79, 0.20, 90))          // yellow.70 (contrast) / .30
+        case .green: ((55, 0.21, 145), (76, 0.17, 145))         // green.60 / .30
+        case .cyan: ((55, 0.21, 205), (76, 0.14, 205))          // cyan.60 / .30
+        case .blue: ((55, 0.24, 260), (76, 0.20, 260))          // blue.60 / .30
+        case .violet: ((55, 0.24, 290), (76, 0.20, 290))        // violet.60 / .30
+        case .purple: ((55, 0.21, 315), (76, 0.17, 315))        // purple.60 / .30
+        case .pink: ((55, 0.21, 360), (76, 0.17, 360))          // pink.60 / .30
+        case .system: nil
+        }
+    }
+
+    func nsColor(dark: Bool) -> NSColor {
+        guard let v = oklch else { return .controlAccentColor }
+        let t = dark ? v.dark : v.light
+        return OKLCH.color(t.0, t.1, t.2)
+    }
+
+    var color: Color {
+        guard oklch != nil else { return Color(nsColor: .controlAccentColor) }
+        return Theme.dynamic(light: nsColor(dark: false), dark: nsColor(dark: true))
+    }
+}
+
+/// System / Light / Dark.
+public enum AppAppearance: String, CaseIterable, Sendable {
+    case system, light, dark
+
+    public var title: String { rawValue.capitalized }
+
+    /// nil = follow macOS.
+    public var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
+/// Re-creates its content when the accent changes (colors are read when views
+/// are built) and applies the accent as the control tint.
+struct ThemedRoot<Content: View>: View {
+    let preferences: AppPreferences
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        let choice = preferences.accentColor
+        content
+            .id(choice)
+            .tint(Theme.accent)
+    }
 }
 
 /// OKLCH → sRGB (Björn Ottosson's OKLab), gamut-clamped.
@@ -130,6 +231,8 @@ struct TagChip: View {
 struct ScrollingChipRow: View {
     let names: [String]
     var size: TagChip.Size = .regular
+    /// Background the row sits on (for the edge fade).
+    var fadeColor: Color = Theme.card
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -139,12 +242,13 @@ struct ScrollingChipRow: View {
             .padding(.vertical, 1)
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-        .mask(
-            // Soft fade at the right edge hints that there is more to scroll.
-            HStack(spacing: 0) {
-                Rectangle()
-                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 14)
-            })
+        // Soft fade at the right edge hints that there is more to scroll.
+        // An overlay in the surface color (not a mask, which renders offscreen).
+        .overlay(alignment: .trailing) {
+            LinearGradient(colors: [fadeColor.opacity(0), fadeColor], startPoint: .leading, endPoint: .trailing)
+                .frame(width: 14)
+                .allowsHitTesting(false)
+        }
     }
 }
 
