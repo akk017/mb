@@ -61,8 +61,10 @@ import Testing
     @MainActor static func rightPanelWidth(in host: NSHostingView<some View>) -> CGFloat {
         let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
         host.cacheDisplay(in: host.bounds, to: rep)
-        let y = Int(rep.pixelsHigh / 2)
         let scale = CGFloat(rep.pixelsWide) / host.bounds.width
+        // A row near the bottom: plain panel background (panel content such
+        // as the image drop area sits higher up and would stop the scan).
+        let y = rep.pixelsHigh - Int(8 * scale)
         // Panel background differs from gallery background; find last change point.
         func color(_ x: Int) -> NSColor { rep.colorAt(x: x, y: y) ?? .clear }
         let panel = color(rep.pixelsWide - 5)

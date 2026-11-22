@@ -215,6 +215,8 @@ public final class LibraryViewModel {
     public func refresh() async { await performSearch() }
 
     @ObservationIgnored private var pendingRefresh: Task<Void, Never>?
+    /// The scheduled refresh, if any (tests await it instead of polling).
+    var pendingRefreshTask: Task<Void, Never>? { pendingRefresh }
 
     /// Coalesces bursts (several enrichment jobs finishing together) into one
     /// refresh after `delay`.
@@ -267,6 +269,26 @@ public final class LibraryViewModel {
     public func saveNote(_ note: String, for itemID: String) throws {
         let updated = try repository.modify(itemID) { $0.note = note }
         replace(updated)
+    }
+
+    /// URL / image editing (nil in tests that don't need it).
+    @ObservationIgnored public var itemEditor: ItemEditor?
+
+    /// Validates and saves an item's URL. Throws `ItemEditError` when invalid.
+    public func setURL(_ raw: String, for itemID: String) throws {
+        guard let itemEditor else { return }
+        replace(try itemEditor.setURL(raw, for: itemID))
+    }
+
+    /// Replaces an image item's picture, or sets a cover on any other item.
+    public func setImage(_ data: Data, for itemID: String) throws {
+        guard let itemEditor else { return }
+        replace(try itemEditor.setImage(data, for: itemID))
+    }
+
+    public func removeImage(for itemID: String) throws {
+        guard let itemEditor else { return }
+        replace(try itemEditor.removeImage(for: itemID))
     }
 
     /// Saves a renamed title (trimmed). Blank or unchanged titles are skipped,

@@ -50,6 +50,24 @@ public struct ItemActions {
         item.meta[LinkPreviewProcessor.previewBlobKey]?.stringValue.flatMap(blobs.url(for:))
     }
 
+    /// Picture for cards: a custom cover wins, then the item's own file
+    /// (image / PDF), then a fetched link preview. `isPreview` = plain image file.
+    public func thumbnail(for item: Item) -> (url: URL, isPreview: Bool)? {
+        if item.meta[ItemEditor.customPreviewKey]?.boolValue == true, let cover = previewURL(for: item) {
+            return (cover, true)
+        }
+        if let file = fileURL(for: item) { return (file, false) }
+        return previewURL(for: item).map { ($0, true) }
+    }
+
+    /// Opens the picture shown in the panel (cover, fetched link preview, the
+    /// image itself, or the PDF) in the default viewer — never the web page.
+    @discardableResult
+    public func openPicture(_ item: Item) -> Bool {
+        guard let picture = thumbnail(for: item)?.url else { return false }
+        return workspace.open(picture)
+    }
+
     public func canOpen(_ item: Item) -> Bool { item.type == .link ? item.url != nil : fileURL(for: item) != nil }
     public func canReveal(_ item: Item) -> Bool { fileURL(for: item) != nil }
 

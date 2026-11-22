@@ -15,13 +15,19 @@ public struct SettingsView: View {
     let onRecognizedTextVisibilityChange: () -> Void
     let clearRecognizedText: () throws -> Int
     let onPositionChange: () -> Void
+    let about: AboutInfo?
+    let reveal: (URL) -> Void
 
     public init(preferences: AppPreferences, navigation: SettingsNavigation, shortcuts: ShortcutSettings,
                 types: TypesSettings?, storage: StorageSettings?,
                 onDockModeChange: @escaping () -> Void = {},
                 onRecognizedTextVisibilityChange: @escaping () -> Void = {},
                 clearRecognizedText: @escaping () throws -> Int = { 0 },
-                onPositionChange: @escaping () -> Void) {
+                onPositionChange: @escaping () -> Void,
+                about: AboutInfo? = nil,
+                reveal: @escaping (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }) {
+        self.about = about
+        self.reveal = reveal
         self.preferences = preferences
         self.navigation = navigation
         self.shortcuts = shortcuts
@@ -54,6 +60,9 @@ public struct SettingsView: View {
             }
             .tabItem { Label { Text("Storage") } icon: { Icon(.hardDrive, size: 18) } }
             .tag(SettingsNavigation.Tab.storage)
+            AboutSettingsTab(info: about ?? .current(dataDirectory: nil), reveal: reveal)
+                .tabItem { Label { Text("About") } icon: { Icon(.brain, size: 18) } }
+                .tag(SettingsNavigation.Tab.about)
         }
         .frame(width: 600)
         .fixedSize(horizontal: false, vertical: true)

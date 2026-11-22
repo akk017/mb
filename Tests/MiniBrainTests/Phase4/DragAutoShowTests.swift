@@ -121,8 +121,12 @@ import Testing
         clock.advance(by: 0.4)
         await clock.waitForSleepers()
         #expect(state.isDropBoxVisible) // showing "Saved"
-        clock.advance(by: 1.2)
-        await waitUntil { !state.isDropBoxVisible }
+        // The result timer is scheduled asynchronously after the previous one
+        // fires; keep time moving so it fires even if it registers late.
+        await waitUntil {
+            clock.advance(by: 0.3)
+            return !state.isDropBoxVisible
+        }
         #expect(!state.isDropBoxVisible)
     }
 

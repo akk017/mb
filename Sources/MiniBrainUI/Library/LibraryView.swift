@@ -647,7 +647,7 @@ struct GalleryView: View {
                                 GalleryCard(
                                     item: result.item,
                                     tags: model.tagsByItem[result.id] ?? [],
-                                    fileURL: actions.fileURL(for: result.item) ?? actions.previewURL(for: result.item),
+                                    thumbnail: actions.thumbnail(for: result.item),
                                     snippet: result.snippet,
                                     customTypeName: model.customType(for: result.item)?.name,
                                     selected: model.isSelected(result.id),
@@ -731,7 +731,7 @@ struct GalleryView: View {
 struct GalleryCard: View {
     let item: Item
     let tags: [ItemTag]
-    let fileURL: URL?
+    let thumbnail: (url: URL, isPreview: Bool)?
     let snippet: String?
     let customTypeName: String?
     let selected: Bool
@@ -757,7 +757,7 @@ struct GalleryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Thumbnail(item: item, fileURL: fileURL, maxPixel: 700)
+            Thumbnail(item: item, thumbnail: thumbnail, maxPixel: 700)
                 .frame(height: 170)
                 .frame(maxWidth: .infinity)
                 .clipped()
@@ -879,20 +879,21 @@ struct ItemContextMenu: View {
 /// Whole picture (fit, never cropped) on a neutral background.
 struct Thumbnail: View {
     let item: Item
-    let fileURL: URL?
+    /// From `ItemActions.thumbnail(for:)`: a cover / link preview is a plain image file.
+    let thumbnail: (url: URL, isPreview: Bool)?
     var maxPixel: Int = 700
 
     var body: some View {
         ZStack {
             Rectangle().fill(Theme.thumbBackground)
-            // Links show their fetched preview image (a plain image file).
-            if let fileURL, let image = ThumbnailCache.image(for: fileURL, type: item.type == .link ? .image : item.type, maxPixel: maxPixel) {
+            let isPDFPage = item.type == .pdf && thumbnail?.isPreview == false
+            if let thumbnail, let image = ThumbnailCache.image(for: thumbnail.url, type: thumbnail.isPreview ? .image : item.type, maxPixel: maxPixel) {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
-                    .padding(item.type == .pdf ? 10 : 0)
-                    .shadow(color: item.type == .pdf ? .black.opacity(0.2) : .clear, radius: 3)
+                    .padding(isPDFPage ? 10 : 0)
+                    .shadow(color: isPDFPage ? .black.opacity(0.2) : .clear, radius: 3)
             } else {
                 placeholder
             }
@@ -956,8 +957,10 @@ struct ItemPropertiesPanel: View {
                                 run { try model.saveNote(new, for: item.id) }
                             }
                         }
-                        if let url = item.url ?? item.meta["source_url"]?.stringValue {
-                            PropertyRow(icon: .link, label: "URL") { URLLabel(urlString: url, font: .system(size: 13.5)) }
+                        PropertyRow(icon: .link, label: "URL") {
+                            InlineURLField(value: item.url ?? item.meta["source_url"]?.stringValue ?? "") { raw in
+                                try model.setURL(raw, for: item.id)
+                            }
                         }
                         if let type = model.customType(for: item) {
                             ForEach(type.fields) { field in
@@ -1106,12 +1109,9 @@ struct ItemPropertiesPanel: View {
 
     @ViewBuilder
     private var preview: some View {
+        imageSlot
         switch item.type {
         case .image, .pdf:
-            if let url = actions.fileURL(for: item), let image = ThumbnailCache.image(for: url, type: item.type, maxPixel: 1200) {
-                PanelPreviewImage(image: image)
-                    .onTapGesture(count: 2) { actions.open(item) }
-            }
             // Extracted text (PDF text, OCR) stays searchable but isn't shown
             // here — except OCR when enabled in Settings.
             if item.type == .image, model.showsRecognizedText, !item.content.isEmpty {
@@ -1122,13 +1122,25 @@ struct ItemPropertiesPanel: View {
                 contentText.padding(.top, -6)
             }
         case .link:
-            if let url = actions.previewURL(for: item), let image = ThumbnailCache.image(for: url, type: .image, maxPixel: 1200) {
-                PanelPreviewImage(image: image)
-                    .onTapGesture(count: 2) { actions.open(item) }
-            }
+            EmptyView()
         case .text:
             if !item.content.isEmpty { contentText }
         }
+    }
+
+    /// Every item has an editable picture: image items replace theirs, others
+    /// get a cover (drop an image, click to choose, or Remove).
+    private var imageSlot: some View {
+        let thumb = actions.thumbnail(for: item)
+        let image = thumb.flatMap { ThumbnailCache.image(for: $0.url, type: $0.isPreview ? .image : item.type, maxPixel: 1200) }
+        return ItemImageSlot(
+            image: image,
+            isImageItem: item.type == .image,
+            canRemove: item.meta[ItemEditor.customPreviewKey]?.boolValue == true,
+            onImage: { data in run { try model.setImage(data, for: item.id) } },
+            onRemove: { run { try model.removeImage(for: item.id) } },
+            onOpen: { actions.openPicture(item) })
+            .padding(.bottom, item.type == .text && !item.content.isEmpty ? 4 : 0)
     }
 
     private var contentText: some View {
@@ -1189,7 +1201,7 @@ struct MultiSelectionPanel: View {
                         .font(.system(size: 26, weight: .bold))
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                         ForEach(items.prefix(12)) { item in
-                            Thumbnail(item: item, fileURL: actions.fileURL(for: item) ?? actions.previewURL(for: item), maxPixel: 240)
+                            Thumbnail(item: item, thumbnail: actions.thumbnail(for: item), maxPixel: 240)
                                 .frame(height: 64)
                                 .clipShape(RoundedRectangle(cornerRadius: 5))
                                 .help(item.title)

@@ -51,7 +51,9 @@ public struct LinkPreviewProcessor: EnrichmentProcessor {
         }
         Log.shared.info("fetched host=\(host) title=\(preview.title?.isEmpty == false) image=\(preview.imageData?.count ?? 0)B", "link-preview")
         var meta: Meta = [:]
-        if let fetched = preview.imageData, !fetched.isEmpty {
+        // A cover the user picked wins over the page's preview image.
+        let hasCustomCover = item.meta[ItemEditor.customPreviewKey]?.boolValue == true
+        if !hasCustomCover, let fetched = preview.imageData, !fetched.isEmpty {
             let webp = optimizeImages() ? ImageOptimizer.webp(from: fetched) : nil
             let data = webp ?? fetched
             let ext = webp != nil ? "webp" : (DataSniffer.imageExtension(fetched) ?? "png")

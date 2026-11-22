@@ -84,7 +84,9 @@ public enum TypeDetector {
     ]
 
     /// "www.x.com/…", "x.com/path", or "x.<common tld>" → https URL; else nil.
-    static func schemelessWebURL(_ text: String) -> URL? {
+    /// With `requireWebHint` false (an explicit URL field) any valid
+    /// "host.tld[/…]" is accepted.
+    static func schemelessWebURL(_ text: String, requireWebHint: Bool = true) -> URL? {
         guard !text.contains("://"), !text.contains("@"), let first = text.first, first.isLetter || first.isNumber
         else { return nil }
         let hostEnd = text.firstIndex { "/?#".contains($0) } ?? text.endIndex
@@ -95,7 +97,7 @@ public enum TypeDetector {
             !label.isEmpty && label.count <= 63 && !label.hasPrefix("-") && !label.hasSuffix("-")
                 && label.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
         }), let tld = labels.last, tld.count >= 2, tld.allSatisfy(\.isLetter) else { return nil }
-        guard host.hasPrefix("www.") || hasPath || commonWebTLDs.contains(String(tld)) else { return nil }
+        guard !requireWebHint || host.hasPrefix("www.") || hasPath || commonWebTLDs.contains(String(tld)) else { return nil }
         guard let url = URL(string: "https://" + text), url.host != nil else { return nil }
         return url
     }
@@ -206,5 +208,28 @@ extension String {
 
     func truncated(_ max: Int) -> String {
         count <= max ? self : String(prefix(max - 1)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+}
+
+/// Validates what someone types into a URL field.
+public enum WebURL {
+    /// http(s) URL with a dotted host, or a schemeless "host.tld[/…]" (gets
+    /// https://). Anything else — "hello world", "ftp://…", emails — is nil.
+    public static func normalize(_ raw: String) -> URL? {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
+        if let url = URL(string: text), let scheme = url.scheme?.lowercased() {
+            guard scheme == "http" || scheme == "https", let host = url.host, isValidHost(host) else {
+                // "example.com:8080" parses with scheme "example.com"; treat as schemeless.
+                return text.contains("://") ? nil : TypeDetector.schemelessWebURL(text, requireWebHint: false)
+            }
+            return url
+        }
+        return TypeDetector.schemelessWebURL(text, requireWebHint: false)
+    }
+
+    static func isValidHost(_ host: String) -> Bool {
+        if host.lowercased() == "localhost" { return true }
+        return TypeDetector.schemelessWebURL(host, requireWebHint: false) != nil
     }
 }

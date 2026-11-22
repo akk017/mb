@@ -216,6 +216,9 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
             if libraryWindow == nil {
                 let model = LibraryViewModel(search: env.search, repository: env.repository, customTypes: env.customTypes)
                 model.showsRecognizedText = preferences.showRecognizedText
+                model.itemEditor = ItemEditor(
+                    database: env.database, blobs: env.blobs, notifier: env.worker,
+                    optimizeImages: { AppPreferences.isImageOptimizationEnabled() })
                 libraryModel = model
                 let actions = ItemActions(
                     workspace: NSWorkspace.shared, pasteboard: NSPasteboard.general,
@@ -299,7 +302,8 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
                 onPositionChange: { [weak self] in
                     guard let self, let panel = self.dropBoxPanel, panel.isVisible else { return }
                     panel.reposition(self.preferences.dropBoxPosition)
-                })
+                },
+                about: AboutInfo.current(dataDirectory: environment?.paths.baseDirectory))
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 600, height: 420),
                 styleMask: [.titled, .closable], backing: .buffered, defer: false)

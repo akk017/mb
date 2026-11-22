@@ -283,7 +283,7 @@ public final class TypesSettings {
 @MainActor
 @Observable
 public final class SettingsNavigation {
-    public enum Tab: Hashable { case general, shortcuts, types, storage }
+    public enum Tab: Hashable { case general, shortcuts, types, storage, about }
     public var tab: Tab = .general
     public init() {}
 }

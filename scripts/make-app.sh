@@ -9,10 +9,16 @@ VERSION="$(sed -n 's/.*version = "\(.*\)".*/\1/p' "$ROOT/Sources/MiniBrainCore/M
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/MiniBrain" "$APP/Contents/MacOS/MiniBrain"
 sed "s/__VERSION__/$VERSION/g" "$ROOT/Resources/Info.plist" > "$APP/Contents/Info.plist"
+# Build stamp for Settings › About.
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || true)"
+if [ -n "$COMMIT" ] && [ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ]; then COMMIT="$COMMIT-dirty"; fi
+plutil -insert MBBuildTime -string "$BUILD_TIME" "$APP/Contents/Info.plist"
+plutil -insert MBGitCommit -string "$COMMIT" "$APP/Contents/Info.plist"
 cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 for b in "$BIN"/*.bundle; do
   case "$(basename "$b")" in *Tests.bundle) continue ;; esac   # test fixtures don't ship
   [ -e "$b" ] && ditto "$b" "$APP/Contents/Resources/$(basename "$b")"
 done
 codesign --force --deep --sign - "$APP"
-echo "built $APP ($VERSION)"
+echo "built $APP ($VERSION, $BUILD_TIME${COMMIT:+, $COMMIT})"

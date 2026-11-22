@@ -197,7 +197,8 @@ Free-form JSON. Search can filter any key with `meta.key<op>value`
 | `category` | string | `ai_tags` | Broad category (lowercase) |
 | `summary` | string | `ai_tags` | One-sentence summary (≤ 280 chars) |
 | `price` | number | `ai_tags` | Price when clearly stated |
-| `preview_blob` | string | `link_preview`, WebP job | Blob hash of a link's preview image |
+| `preview_blob` | string | `link_preview`, WebP job, panel image drop | Blob hash of the item's preview / cover image (links: fetched page image; any item: a cover the user dropped or chose) |
+| `preview_custom` | bool | panel image drop | `preview_blob` was chosen by the user: link-preview refreshes keep it; Remove Cover clears both (links then fetch their page image again) |
 | `page_title` | string | `link_preview` | Fetched page title |
 | `suppressed_ai_tags` | [string] | tag removal | Lowercased tags the user removed; AI never re-adds them |
 | `fields` | object | custom types | `{ fieldID: value }` for the item's custom type |

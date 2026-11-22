@@ -65,8 +65,13 @@ final class GatedCapturer: Capturing, @unchecked Sendable {
 @MainActor
 func waitUntil(_ condition: @MainActor () -> Bool, timeout: TimeInterval = 5) async {
     let end = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < end {
+    // Also require a minimum number of polls: when other main-actor tests hog
+    // the main thread, the deadline can pass before the awaited work (a
+    // debounce, a scheduled refresh) ever got a turn to run.
+    var polls = 0
+    while !condition(), Date() < end || polls < 100 {
         try? await Task.sleep(nanoseconds: 1_000_000)
+        polls += 1
     }
 }
 

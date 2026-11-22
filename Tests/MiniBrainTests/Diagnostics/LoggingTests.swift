@@ -146,9 +146,14 @@ private func contents(_ log: Log) throws -> String {
             $0.title = "Kaantha (2025)"
             $0.meta["preview_blob"] = .string("abc")
         }
-        for _ in 0..<5 { lib.scheduleRefresh(after: .milliseconds(50)) } // burst → one refresh
-        await waitUntil { lib.results.first?.item.title == "Kaantha (2025)" }
+        lib.scheduleRefresh(after: .milliseconds(50))
+        let scheduled = try #require(lib.pendingRefreshTask)
+        for _ in 0..<4 { lib.scheduleRefresh(after: .milliseconds(50)) } // burst → same refresh
+        #expect(lib.pendingRefreshTask == scheduled)
+        await scheduled.value
+        #expect(lib.results.first?.item.title == "Kaantha (2025)")
         #expect(lib.results.first?.item.meta["preview_blob"] == .string("abc"))
+        #expect(lib.pendingRefreshTask == nil)
     }
 }
 
