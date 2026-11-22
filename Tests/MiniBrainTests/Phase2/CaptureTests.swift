@@ -116,6 +116,29 @@ func fakePDF(_ tag: String = "a") -> Data { Data("%PDF-1.4\n\(tag)".utf8) }
         #expect(try TypeDetector.detect(.plainText("ftp://x.com/file")).type == .text)
     }
 
+    @Test(arguments: [
+        ("www.imdb.com/title/tt2187153/", "https://www.imdb.com/title/tt2187153/"),
+        ("  www.imdb.com/title/tt6380520/\n", "https://www.imdb.com/title/tt6380520/"),
+        ("imdb.com/title/tt1", "https://imdb.com/title/tt1"),
+        ("github.com", "https://github.com"),
+        ("swift.org/documentation", "https://swift.org/documentation"),
+        ("www.example.co.uk", "https://www.example.co.uk"),
+        ("news.ycombinator.com/item?id=1", "https://news.ycombinator.com/item?id=1"),
+    ])
+    func schemelessWebAddressBecomesHTTPSLink(text: String, expected: String) throws {
+        let d = try TypeDetector.detect(.plainText(text))
+        #expect(d.type == .link)
+        #expect(d.url == expected)
+    }
+
+    @Test(arguments: [
+        "notes.txt", "README.md", "v1.2", "e.g.", "3.14", "me@example.com", "Package.swift",
+        "see www.imdb.com/title/tt1 later", "localhost:8080", "ftp.example", "a.b",
+    ])
+    func schemelessLookalikesStayText(text: String) throws {
+        #expect(try TypeDetector.detect(.plainText(text)).type == .text)
+    }
+
     @Test func unknownPayloadRejected() {
         #expect(throws: MiniBrainError.emptyPayload) { try TypeDetector.detect(CapturePayload()) }
         #expect(throws: MiniBrainError.emptyPayload) { try TypeDetector.detect(.plainText("   \n")) }

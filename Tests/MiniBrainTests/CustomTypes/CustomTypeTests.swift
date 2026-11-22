@@ -272,13 +272,63 @@ func productsType(_ repo: CustomTypeRepository) throws -> CustomType {
         #expect(try env.repo.count() == 1)
     }
 
-    @Test func typeWithoutFieldsSavesImmediately() async throws {
+    @Test func typeWithoutFieldsStillAsksForName() async throws {
         let (env, repo, vm, _) = try make()
         let bare = try repo.create(name: "Inbox")
         await vm.drop([NSItemProvider(object: "x" as NSString)], chooseType: true)
         await vm.choose(bare)
-        #expect(vm.state == .saved(title: "to Inbox"))
+        guard case .editingFields(let item, let type) = vm.state else {
+            Issue.record("expected name form, got \(vm.state)"); return
+        }
+        #expect(type.id == bare.id)
         #expect(try env.repo.fetchAll().first?.customTypeID == bare.id)
+        vm.saveFields([:], title: "  Groceries  ")
+        #expect(vm.state == .saved(title: "to Inbox"))
+        #expect(try env.repo.fetch(item.id)?.title == "Groceries")
+    }
+
+    @Test func blankNameKeepsDetectedTitle() async throws {
+        let (env, repo, vm, _) = try make()
+        let bare = try repo.create(name: "Inbox")
+        await vm.drop([NSItemProvider(object: "detected" as NSString)], chooseType: true)
+        await vm.choose(bare)
+        guard case .editingFields(let item, _) = vm.state else { Issue.record("no form"); return }
+        vm.saveFields([:], title: "   ")
+        #expect(try env.repo.fetch(item.id)?.title == "detected")
+    }
+
+    @Test func skipKeepsDetectedTitle() async throws {
+        let (env, repo, vm, _) = try make()
+        let bare = try repo.create(name: "Inbox")
+        await vm.drop([NSItemProvider(object: "detected" as NSString)], chooseType: true)
+        await vm.choose(bare)
+        guard case .editingFields(let item, _) = vm.state else { Issue.record("no form"); return }
+        vm.skipFields()
+        #expect(vm.state == .saved(title: "to Inbox"))
+        #expect(try env.repo.fetch(item.id)?.title == "detected")
+    }
+
+    @Test func nameFieldFollowsTitle() async throws {
+        let (env, repo, vm, _) = try make()
+        let type = try repo.create(name: "Books", fields: [
+            FieldDefinition(id: "t", name: "Title", kind: .text),
+            FieldDefinition(id: "a", name: "Author", kind: .text),
+        ])
+        #expect(type.nameField?.id == "t")
+        await vm.drop([NSItemProvider(object: "x" as NSString)], chooseType: true)
+        await vm.choose(type)
+        guard case .editingFields(let item, _) = vm.state else { Issue.record("no form"); return }
+        vm.saveFields(["a": "Le Guin"], title: "Earthsea")
+        let saved = try #require(try env.repo.fetch(item.id))
+        #expect(saved.title == "Earthsea")
+        #expect(saved.fieldValues == ["t": "Earthsea", "a": "Le Guin"])
+    }
+
+    @Test func nameFieldDetection() {
+        let date = Date(timeIntervalSince1970: 0)
+        #expect(CustomType(name: "A", fields: [FieldDefinition(name: " name ", kind: .text)], createdAt: date).nameField != nil)
+        #expect(CustomType(name: "A", fields: [FieldDefinition(name: "Name", kind: .largeText)], createdAt: date).nameField == nil)
+        #expect(CustomType(name: "A", fields: [FieldDefinition(name: "Brand", kind: .text)], createdAt: date).nameField == nil)
     }
 
     @Test func noTypesYetShowsEmptyChooser() async throws {

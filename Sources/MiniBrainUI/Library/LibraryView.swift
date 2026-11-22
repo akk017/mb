@@ -43,8 +43,8 @@ public struct LibraryView: View {
         }
         .background(GeometryReader { geo in
             Color.clear
-                .onAppear { layout.windowWidth = geo.size.width }
-                .onChange(of: geo.size.width) { _, w in layout.windowWidth = w }
+                .onAppear { layout.updateWindowWidth(geo.size.width) }
+                .onChange(of: geo.size.width) { _, w in layout.updateWindowWidth(w) }
         })
         .background(Theme.content)
         .foregroundStyle(Theme.primary)
@@ -76,9 +76,12 @@ enum DetailPanelWidth {
 
     /// Keeps the panel between `minimum` and whatever leaves the gallery its
     /// minimum width in the current window.
+    /// Always whole points: a fractional width (e.g. a saved 496.89 pt) makes
+    /// SwiftUI layout and AppKit's pixel alignment of scroll views disagree by
+    /// a fraction and re-lay out forever — the app froze.
     static func clamp(_ width: Double, windowWidth: Double) -> Double {
-        let maximum = max(minimum, windowWidth - sidebar - minimumGallery - 1)
-        return min(max(width, minimum), maximum)
+        let maximum = max(minimum, (windowWidth - sidebar - minimumGallery - 1).rounded(.down))
+        return min(max(width.rounded(), minimum), maximum)
     }
 }
 
@@ -117,6 +120,18 @@ final class PanelLayout {
     /// Width while dragging (nil when not dragging).
     var liveWidth: Double?
     var windowWidth: Double = 1320
+
+    /// Sub-point changes are pixel-alignment jitter; feeding them back into
+    /// the panel width can start a layout loop.
+    nonisolated static func isMeaningfulWidthChange(from old: Double, to new: Double) -> Bool {
+        abs(new.rounded() - old.rounded()) >= 1
+    }
+
+    func updateWindowWidth(_ width: Double) {
+        guard Self.isMeaningfulWidthChange(from: windowWidth, to: width) else { return }
+        LoopDetector.shared.tick("library.windowWidth", detail: "\(windowWidth)→\(width)")
+        windowWidth = width.rounded()
+    }
 }
 
 /// Handle + panel content at the saved/live width. Only this view re-renders
@@ -143,13 +158,15 @@ struct DetailPanelContainer<Content: View>: View {
     }
 }
 
-/// Draggable leading edge of the detail panel: 1px divider, 9pt grab area,
-/// resize cursor; double-click restores the default width.
+/// Draggable leading edge of the detail panel (AppKit-backed): AppKit keeps
+/// delivering mouse-drag events to the view that got mouseDown even when the
+/// pointer runs ahead of the moving edge, and the cursor comes from a cursor
+/// rect plus a balanced push/pop for the drag — no flicker, never stuck.
+/// Double-click restores the default width.
 struct PanelResizeHandle: View {
     @Binding var width: Double
     let layout: PanelLayout
-    @State private var dragStart: Double?
-    @State private var hovering = false
+    @State private var highlighted = false
 
     var body: some View {
         ZStack {
@@ -157,31 +174,119 @@ struct PanelResizeHandle: View {
             Rectangle()
                 .fill(Theme.accent)
                 .frame(width: 2)
-                .opacity(hovering || dragStart != nil ? 1 : 0)
+                .opacity(highlighted ? 1 : 0)
+                .allowsHitTesting(false)
+            ResizeHandleView(
+                currentWidth: { DetailPanelWidth.clamp(width, windowWidth: layout.windowWidth) },
+                onDrag: { proposed in
+                    let next = DetailPanelWidth.clamp(proposed, windowWidth: layout.windowWidth)
+                    if next != layout.liveWidth { layout.liveWidth = next }
+                },
+                onEnd: {
+                    if let live = layout.liveWidth { width = live } // persist
+                    layout.liveWidth = nil
+                },
+                onReset: {
+                    layout.liveWidth = nil
+                    width = DetailPanelWidth.standard
+                },
+                onHighlight: { highlighted = $0 })
         }
         .frame(width: 11)
         .frame(maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onHover { inside in
-            hovering = inside
-            if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-        }
-        .gesture(
-            DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                .onChanged { value in
-                    let start = dragStart ?? DetailPanelWidth.clamp(width, windowWidth: layout.windowWidth)
-                    dragStart = start
-                    // Dragging left widens the panel.
-                    let next = DetailPanelWidth.clamp(start - value.translation.width, windowWidth: layout.windowWidth)
-                    if next != layout.liveWidth { layout.liveWidth = next }
-                }
-                .onEnded { _ in
-                    if let live = layout.liveWidth { width = live } // persist
-                    layout.liveWidth = nil
-                    dragStart = nil
-                })
-        .onTapGesture(count: 2) { width = DetailPanelWidth.standard }
         .help("Drag to resize · double-click to reset")
+    }
+}
+
+/// The AppKit view behind `PanelResizeHandle`.
+struct ResizeHandleView: NSViewRepresentable {
+    let currentWidth: () -> Double
+    let onDrag: (Double) -> Void
+    let onEnd: () -> Void
+    let onReset: () -> Void
+    let onHighlight: (Bool) -> Void
+
+    func makeNSView(context: Context) -> HandleNSView {
+        let view = HandleNSView()
+        update(view)
+        return view
+    }
+
+    func updateNSView(_ view: HandleNSView, context: Context) { update(view) }
+
+    private func update(_ view: HandleNSView) {
+        view.currentWidth = currentWidth
+        view.onDrag = onDrag
+        view.onEnd = onEnd
+        view.onReset = onReset
+        view.onHighlight = onHighlight
+    }
+
+    final class HandleNSView: NSView {
+        var currentWidth: () -> Double = { DetailPanelWidth.standard }
+        var onDrag: (Double) -> Void = { _ in }
+        var onEnd: () -> Void = {}
+        var onReset: () -> Void = {}
+        var onHighlight: (Bool) -> Void = { _ in }
+
+        private(set) var isDragging = false
+        private var startX: CGFloat = 0
+        private var startWidth: Double = 0
+        private var hovering = false
+        private var trackingArea: NSTrackingArea?
+
+        override var mouseDownCanMoveWindow: Bool { false }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .resizeLeftRight)
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let trackingArea { removeTrackingArea(trackingArea) }
+            let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                      owner: self, userInfo: nil)
+            addTrackingArea(area)
+            trackingArea = area
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            hovering = true
+            onHighlight(true)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            hovering = false
+            if !isDragging { onHighlight(false) }
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            if event.clickCount == 2 {
+                onReset()
+                return
+            }
+            isDragging = true
+            startX = event.locationInWindow.x
+            startWidth = currentWidth()
+            NSCursor.resizeLeftRight.push()
+            onHighlight(true)
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard isDragging else { return }
+            // Dragging left widens the panel (it grows from the right edge).
+            onDrag(startWidth + Double(startX - event.locationInWindow.x))
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            guard isDragging else { return }
+            isDragging = false
+            NSCursor.pop()
+            onEnd()
+            if !hovering { onHighlight(false) }
+            window?.invalidateCursorRects(for: self)
+        }
     }
 }
 
@@ -266,6 +371,7 @@ struct LibrarySidebar: View {
                     .padding(.horizontal, 8)
                     .padding(.top, 2) }
                 }
+                .overlayScrollers()
                 .padding(.horizontal, 10)
                 .padding(.bottom, 16)
             }
@@ -508,7 +614,10 @@ struct HoverHighlight<Content: View>: View {
     var body: some View {
         content
             .background(hovering ? Theme.hover : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .onHover { hovering = $0 }
+            .onHover {
+                LoopDetector.shared.tick("hover.propertyRow", detail: "\($0)")
+                hovering = $0
+            }
     }
 }
 
@@ -551,6 +660,7 @@ struct GalleryView: View {
                                 .contextMenu { ItemContextMenu(model: model, actions: actions, item: result.item) }
                             }
                         }
+                        .overlayScrollers()
                         .padding(.horizontal, 28)
                         .padding(.vertical, 18)
                     }
@@ -629,7 +739,21 @@ struct GalleryCard: View {
     @State private var hovering = false
 
     /// OCR text of images is hidden unless enabled in Settings.
-    private var showsContent: Bool { item.type != .image || showsRecognizedText }
+    enum InfoLine: Equatable { case url(String), snippet(String), blank }
+
+    /// Card bottom line. Extracted text never appears on cards: PDF/link text
+    /// never, OCR text only when "Show recognized text" is on; text notes show
+    /// their search snippet.
+    static func infoLine(for item: Item, snippet: String?, showsRecognizedText: Bool) -> InfoLine {
+        if let url = item.url ?? item.meta["source_url"]?.stringValue { return .url(url) }
+        let allowed = switch item.type {
+        case .text: true
+        case .image: showsRecognizedText
+        case .pdf, .link: false
+        }
+        if allowed, let snippet, !snippet.isEmpty { return .snippet(snippet) }
+        return .blank
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -682,25 +806,27 @@ struct GalleryCard: View {
         // on every layout pass and make resizing stutter.
         .shadow(color: .black.opacity(hovering ? 0.18 : 0), radius: hovering ? 6 : 0, y: 1)
         .contentShape(RoundedRectangle(cornerRadius: 8))
-        .onHover { hovering = $0 }
+        .onHover {
+            LoopDetector.shared.tick("hover.galleryCard", detail: "\($0)")
+            hovering = $0
+        }
     }
 
     static let titleHeight: CGFloat = 20
     static let tagsHeight: CGFloat = 20
     static let infoHeight: CGFloat = 16
 
-    /// One line: URL, else search snippet, else content preview, else blank.
+    /// One line: URL, else a search snippet (text notes; images only if OCR text is shown), else blank.
     @ViewBuilder
     private var infoLine: some View {
-        if let url = item.url ?? item.meta["source_url"]?.stringValue {
-            URLLabel(urlString: url)
-        } else if let snippet, !snippet.isEmpty, showsContent {
-            highlighted(snippet.replacingOccurrences(of: "\n", with: " "))
+        switch Self.infoLine(for: item, snippet: snippet, showsRecognizedText: showsRecognizedText) {
+        case .url(let url):
+            URLLabel(urlString: url, isClickable: false)
+                .help(url)
+        case .snippet(let text):
+            highlighted(text.replacingOccurrences(of: "\n", with: " "))
                 .font(.system(size: 12)).foregroundStyle(Theme.secondary).lineLimit(1)
-        } else if !item.content.isEmpty, item.type != .text, showsContent {
-            Text(item.content.replacingOccurrences(of: "\n", with: " "))
-                .font(.system(size: 12)).foregroundStyle(Theme.secondary).lineLimit(1)
-        } else {
+        case .blank:
             Color.clear
         }
     }
@@ -796,6 +922,7 @@ struct ItemPropertiesPanel: View {
     let actions: ItemActions
     let item: Item
     @State private var title = ""
+    @State private var saverBox = SaverBox()
     @State private var showTagEditor = false
     @State private var errorText: String?
 
@@ -808,7 +935,9 @@ struct ItemPropertiesPanel: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 30, weight: .bold))
                         .lineLimit(1...4)
-                        .onSubmit(saveTitle)
+                        // Autosaves after a pause; Return saves immediately.
+                        .onChange(of: title) { _, new in titleSaver.schedule(new) }
+                        .onSubmit { titleSaver.flush() }
                         .padding(.bottom, 18)
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -846,6 +975,7 @@ struct ItemPropertiesPanel: View {
                     Theme.divider.frame(height: 1).padding(.vertical, 20)
                     preview
                 }
+                .overlayScrollers()
                 .padding(.horizontal, 30)
                 .padding(.top, 8)
                 .padding(.bottom, 36)
@@ -853,6 +983,7 @@ struct ItemPropertiesPanel: View {
         }
         .background(Theme.panel)
         .onAppear { title = item.title }
+        .onDisappear { titleSaver.flush() } // switching item / closing panel keeps the edit
     }
 
     // Toolbar: close · open · reveal · copy · trash
@@ -1013,15 +1144,25 @@ struct ItemPropertiesPanel: View {
         run { try model.saveFieldValue(value, field: field.id, for: item.id) }
     }
 
-    private func saveTitle() {
-        guard title != item.title else { return }
-        run { try model.saveTitle(title, for: item.id) }
+    /// Debounced title saves; flushed on Return and when the panel goes away.
+    private var titleSaver: DebouncedSaver {
+        if let saver = saverBox.saver { return saver }
+        let saver = DebouncedSaver { [model, id = item.id] new in
+            do { try model.saveTitle(new, for: id) } catch {
+                Log.shared.error("title save failed item=\(id): \(error)", "library")
+            }
+        }
+        saverBox.saver = saver
+        return saver
     }
 
     private func run(_ op: () throws -> Void) {
         do { try op(); errorText = nil } catch { errorText = error.localizedDescription }
     }
 }
+
+/// Holds the panel's saver so it's created once per panel, not per render.
+@MainActor final class SaverBox { var saver: DebouncedSaver? }
 
 /// Shown when several items are selected: bulk tag / type / trash.
 struct MultiSelectionPanel: View {
@@ -1094,6 +1235,7 @@ struct MultiSelectionPanel: View {
                         .font(.caption)
                         .foregroundStyle(Theme.tertiary)
                 }
+                .overlayScrollers()
                 .padding(.horizontal, 30)
                 .padding(.bottom, 30)
             }
@@ -1256,6 +1398,7 @@ struct TagEditor: View {
                         optionRow { TagChip(name: name) } action: { add(name) }
                     }
                 }
+                .overlayScrollers()
                 .padding(.horizontal, 4)
                 .padding(.bottom, 6)
             }

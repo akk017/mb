@@ -483,6 +483,22 @@ struct StorageSettingsTab: View {
                     Text(message).font(.caption).foregroundStyle(.orange)
                 }
             }
+            Section("Diagnostics") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(storage.logsDirectory.path)
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                    Text("Captures, background jobs, errors and freezes. No item contents.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Spacer()
+                    Button("Show Logs in Finder") { storage.revealLogs() }
+                }
+            }
         }
         .formStyle(.grouped)
         .onAppear { storage.refresh() }

@@ -214,6 +214,20 @@ public final class LibraryViewModel {
 
     public func refresh() async { await performSearch() }
 
+    @ObservationIgnored private var pendingRefresh: Task<Void, Never>?
+
+    /// Coalesces bursts (several enrichment jobs finishing together) into one
+    /// refresh after `delay`.
+    public func scheduleRefresh(after delay: Duration = .milliseconds(350)) {
+        guard pendingRefresh == nil else { return }
+        pendingRefresh = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self else { return }
+            self.pendingRefresh = nil
+            await self.refresh()
+        }
+    }
+
     // MARK: - Detail editing
 
     public func tags(for itemID: String) -> [ItemTag] {
@@ -255,8 +269,15 @@ public final class LibraryViewModel {
         replace(updated)
     }
 
+    /// Saves a renamed title (trimmed). Blank or unchanged titles are skipped,
+    /// so autosave while typing doesn't write on every pause.
     public func saveTitle(_ title: String, for itemID: String) throws {
-        let updated = try repository.modify(itemID) { $0.title = title }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let cached = results.first(where: { $0.id == itemID })?.item
+        let current = try cached ?? repository.fetch(itemID)
+        guard current?.title != trimmed else { return }
+        let updated = try repository.modify(itemID) { $0.title = trimmed }
         replace(updated)
     }
 
@@ -315,5 +336,38 @@ public final class LibraryViewModel {
 extension SmartSearch: SearchProviding {
     public func results(for query: String, limit: Int) async throws -> [SearchResult] {
         try await search(query, limit: limit)
+    }
+}
+
+/// Runs `save` once typing pauses for `delay`; `flush()` saves right away
+/// (Return, leaving the field/panel) and cancels the pending save.
+@MainActor
+public final class DebouncedSaver {
+    private let delay: Duration
+    private let save: (String) -> Void
+    private var pending: String?
+    private var task: Task<Void, Never>?
+
+    public init(delay: Duration = .milliseconds(600), save: @escaping (String) -> Void) {
+        self.delay = delay
+        self.save = save
+    }
+
+    public func schedule(_ value: String) {
+        pending = value
+        task?.cancel()
+        task = Task { [weak self, delay] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.flush()
+        }
+    }
+
+    public func flush() {
+        task?.cancel()
+        task = nil
+        guard let value = pending else { return }
+        pending = nil
+        save(value)
     }
 }

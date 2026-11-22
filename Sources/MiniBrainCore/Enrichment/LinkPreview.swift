@@ -41,7 +41,15 @@ public struct LinkPreviewProcessor: EnrichmentProcessor {
         guard isEnabled(), item.type == .link, let urlString = item.url, let url = URL(string: urlString) else {
             return .empty
         }
-        let preview = try await fetcher.preview(for: url)
+        let host = url.host ?? "?"
+        let preview: LinkPreview
+        do {
+            preview = try await fetcher.preview(for: url)
+        } catch {
+            Log.shared.error("fetch failed host=\(host): \(error)", "link-preview")
+            throw error
+        }
+        Log.shared.info("fetched host=\(host) title=\(preview.title?.isEmpty == false) image=\(preview.imageData?.count ?? 0)B", "link-preview")
         var meta: Meta = [:]
         if let fetched = preview.imageData, !fetched.isEmpty {
             let webp = optimizeImages() ? ImageOptimizer.webp(from: fetched) : nil
@@ -77,7 +85,13 @@ public struct LinkPresentationFetcher: LinkPreviewFetching {
         let imageProvider = metadata.imageProvider ?? metadata.iconProvider
         var data: Data?
         if let imageProvider {
-            data = try? await Self.loadImageData(imageProvider, maxPixel: maxPixel)
+            do {
+                data = try await Self.loadImageData(imageProvider, maxPixel: maxPixel)
+            } catch {
+                Log.shared.warning("image load failed host=\(url.host ?? "?"): \(error)", "link-preview")
+            }
+        } else {
+            Log.shared.info("no image or icon in metadata host=\(url.host ?? "?")", "link-preview")
         }
         return LinkPreview(title: title, imageData: data)
     }

@@ -2,11 +2,10 @@ import AppKit
 import MiniBrainCore
 import SwiftUI
 
-/// Library palette from `colors-firefox-dev.json` (Firefox Developer
-/// Edition tokens), tuned to the blue-grey logo: surfaces are `gray-30`
-/// (#BAC2CA, hue 210 — the logo's hue) and `blue-110` layered with the json's
-/// `white/black alpha` tokens. Accent = json `accent.primary`. Tag colors use
-/// the json OKLCH hue ramps. Solid colors only — no materials.
+/// Library palette: neutrals from the **Slate** scale (OKLCH, cool blue-grey,
+/// matches the logo), accent from `colors-firefox-dev.json` (`accent.primary`
+/// or a json hue), tag colors from the json OKLCH hue ramps.
+/// Solid colors only — no materials.
 enum Theme {
     static func dynamic(light: NSColor, dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -19,46 +18,36 @@ enum Theme {
                 blue: CGFloat(value & 0xFF) / 255, alpha: alpha)
     }
 
-    // json tokens
-    static let gray0 = hex(0xFBFBFE)                          // color.gray.0
-    static let gray30 = hex(0xBAC2CA)                         // color.gray.30 — blue-grey, matches logo
-    static let white = hex(0xFFFFFF)                          // color.white.@base
-    static let blue110 = OKLCH.color(20, 0.05, 260)           // color.blue.110
-    static func white(_ a: CGFloat) -> NSColor { NSColor(white: 1, alpha: a) }   // color.white.alpha.*
-    static func black(_ a: CGFloat) -> NSColor { NSColor(white: 0, alpha: a) }   // color.black.alpha.*
+    static let white = hex(0xFFFFFF)
+    static func white(_ a: CGFloat) -> NSColor { NSColor(white: 1, alpha: a) }
+    static func black(_ a: CGFloat) -> NSColor { NSColor(white: 0, alpha: a) }
 
-    /// `top` at `alpha` composited over opaque `base` (how alpha tokens layer).
-    static func over(_ base: NSColor, _ top: NSColor, _ alpha: CGFloat) -> NSColor {
-        let b = base.usingColorSpace(.sRGB)!, t = top.usingColorSpace(.sRGB)!
-        return NSColor(srgbRed: b.redComponent * (1 - alpha) + t.redComponent * alpha,
-                       green: b.greenComponent * (1 - alpha) + t.greenComponent * alpha,
-                       blue: b.blueComponent * (1 - alpha) + t.blueComponent * alpha, alpha: 1)
-    }
+    // Slate scale (OKLCH)
+    static let slate50 = OKLCH.color(98.4, 0.003, 247.858)   // #F8FAFC
+    static let slate100 = OKLCH.color(96.8, 0.007, 247.896)  // #F1F5F9
+    static let slate200 = OKLCH.color(92.9, 0.013, 255.508)  // #E2E8F0
+    static let slate300 = OKLCH.color(86.9, 0.022, 252.894)  // #CAD5E2
+    static let slate400 = OKLCH.color(70.4, 0.040, 256.788)  // #90A1B9
+    static let slate500 = OKLCH.color(55.4, 0.046, 257.417)  // #62748E
+    static let slate600 = OKLCH.color(44.6, 0.043, 257.281)  // #45556C
+    static let slate700 = OKLCH.color(37.2, 0.044, 257.287)  // #314158
+    static let slate800 = OKLCH.color(27.9, 0.041, 260.031)  // #1D293D
+    static let slate900 = OKLCH.color(20.8, 0.042, 265.755)  // #0F172B
+    static let slate950 = OKLCH.color(12.9, 0.042, 264.695)  // #020618
 
-    // Blue-grey ramp built from the tokens above.
-    static let slate50 = over(gray30, white, 0.90)   // #F8F9FA  white.90 over gray-30
-    static let slate100 = over(gray30, white, 0.80)  // #F1F3F4  white.80 over gray-30
-    static let slate150 = over(gray30, white, 0.70)  // #EAEDEF  white.70 over gray-30
-    static let slate250 = over(gray30, white, 0.50)  // #DCE0E4  white.50 over gray-30
-    static let slate600 = over(gray30, black(1), 0.30) // #82888D black.30 over gray-30
-    static let slate700 = over(gray30, black(1), 0.50) // #5D6165 black.50 over gray-30
-    static let ink800 = over(blue110, white, 0.20)   // #394456  blue-110 + white.20
-    static let ink850 = over(blue110, white, 0.10)   // #212D41  blue-110 + white.10
-    static let ink900 = over(ink850, black(1), 0.30) // #171F2E  (blue-110 + white.10) + black.30
-
-    static let sidebar = dynamic(light: slate150, dark: ink850)
-    static let content = dynamic(light: slate50, dark: ink900)
-    static let panel = dynamic(light: slate50, dark: ink850)
-    static let card = dynamic(light: white, dark: ink850)
+    static let sidebar = dynamic(light: slate100, dark: slate900)
+    static let content = dynamic(light: slate50, dark: slate950)
+    static let panel = dynamic(light: slate50, dark: slate900)
+    static let card = dynamic(light: white, dark: slate900)
     static let cardBorder = dynamic(light: black(0.10), dark: white(0.10))
-    static let thumbBackground = dynamic(light: slate100, dark: ink900)
+    static let thumbBackground = dynamic(light: slate100, dark: slate950)
     static let hover = dynamic(light: black(0.05), dark: white(0.06))
     static let selectedRow = dynamic(light: black(0.10), dark: white(0.10))
     static let divider = dynamic(light: black(0.10), dark: white(0.10))
     static let field = dynamic(light: black(0.05), dark: white(0.10))
-    static let primary = dynamic(light: ink850, dark: gray0)
-    static let secondary = dynamic(light: slate700, dark: gray30)
-    static let tertiary = dynamic(light: slate600, dark: over(ink900, white, 0.40))
+    static let primary = dynamic(light: slate900, dark: slate50)
+    static let secondary = dynamic(light: slate600, dark: slate400)
+    static let tertiary = dynamic(light: slate500, dark: slate500)
 
     /// Current accent (Settings › General › Accent). Default = json
     /// `accent.primary` (light blue.60, dark cyan.30).
@@ -70,19 +59,19 @@ enum Theme {
     /// color.accent.attention — used for success ("Saved").
     static let attention = dynamic(light: hex(0x2AC3A2), dark: hex(0x54FFBD))
     /// Text on an accent fill.
-    static let onAccent = dynamic(light: white, dark: ink900)
+    static let onAccent = dynamic(light: white, dark: slate950)
 
     /// Tag chips: (background, text) per hue. Light uses step 10 on 80,
     /// dark uses step 90 on 10 — all from the json's OKLCH ramps.
     static let tagHues: [Double] = [15, 50, 90, 145, 205, 260, 290, 315, 360] // red … pink
-    static let tagBackgrounds: [Color] = [dynamic(light: slate250, dark: ink800)] + tagHues.map { h in
+    static let tagBackgrounds: [Color] = [dynamic(light: slate200, dark: slate800)] + tagHues.map { h in
         dynamic(light: OKLCH.color(90, 0.1, h), dark: OKLCH.color(34, 0.14, h))
     }
-    static let tagForegrounds: [Color] = [dynamic(light: ink850, dark: gray0)] + tagHues.map { h in
+    static let tagForegrounds: [Color] = [dynamic(light: slate800, dark: slate50)] + tagHues.map { h in
         dynamic(light: OKLCH.color(41, 0.17, h), dark: OKLCH.color(90, 0.1, h))
     }
     /// Neutral chip text (badges).
-    static let tagText = dynamic(light: ink850, dark: gray0)
+    static let tagText = dynamic(light: slate800, dark: slate50)
 }
 
 /// Accent options: the json default, every json hue ramp (light step 60 /
@@ -346,11 +335,15 @@ struct FlowLayout: Layout {
 struct URLLabel: View {
     let urlString: String
     var font: Font = .system(size: 12.5)
+    /// Gallery cards pass false: a plain label, no AppKit-backed Link. Links
+    /// inside clipped card layers can render mirrored, and a card click
+    /// should select, not open the browser.
+    var isClickable = true
 
     var body: some View {
         let parts = Self.split(urlString)
         Group {
-            if let url = URL(string: urlString), url.scheme != nil {
+            if isClickable, let url = URL(string: urlString), url.scheme != nil {
                 Link(destination: url) { label(parts) }
                     .buttonStyle(.plain)
                     .help(urlString)
@@ -419,9 +412,11 @@ import PDFKit
 
 enum PDFThumbnail {
     static func make(url: URL, maxPixel: Int) -> NSImage? {
-        guard let page = PDFDocument(url: url)?.page(at: 0) else { return nil }
+        // Keep the document alive while drawing: a page whose document was
+        // freed draws nothing (AppKit logs "PDFDocument is nil").
+        guard let document = PDFDocument(url: url), let page = document.page(at: 0) else { return nil }
         let side = CGFloat(maxPixel)
-        return page.thumbnail(of: NSSize(width: side, height: side), for: .cropBox)
+        return withExtendedLifetime(document) { page.thumbnail(of: NSSize(width: side, height: side), for: .cropBox) }
     }
 }
 
@@ -489,4 +484,49 @@ extension Color {
         default: self = .gray
         }
     }
+}
+
+/// Makes the enclosing scroll view use overlay scrollers, even when System
+/// Settings › Show scroll bars is "Always". Legacy scrollers take ~15 pt
+/// of width and auto-hide when content fits, so content whose height depends
+/// on its width (wrapping titles, aspect-fit images, adaptive grid columns)
+/// can flip the scroller on and off every layout pass — an endless loop that
+/// freezes the app ("Not Responding"). Overlay scrollers take no width.
+struct OverlayScrollerStyle: NSViewRepresentable {
+    final class Probe: NSView {
+        private var observer: NSObjectProtocol?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            apply()
+            guard observer == nil, window != nil else { return }
+            // AppKit re-applies the system style when the setting changes.
+            observer = NotificationCenter.default.addObserver(
+                forName: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                // Apply now and again after AppKit's own observers ran.
+                MainActor.assumeIsolated { self?.apply() }
+                RunLoop.main.perform { MainActor.assumeIsolated { self?.apply() } }
+            }
+        }
+
+        func apply() {
+            guard let scrollView = enclosingScrollView, scrollView.scrollerStyle != .overlay else { return }
+            scrollView.scrollerStyle = .overlay
+        }
+
+        isolated deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
+    }
+
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ view: Probe, context: Context) { view.apply() }
+}
+
+extension View {
+    /// Put on a ScrollView's content: see `OverlayScrollerStyle`.
+    func overlayScrollers() -> some View { background(OverlayScrollerStyle()) }
 }

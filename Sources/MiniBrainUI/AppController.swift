@@ -79,10 +79,15 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
     private var dropBoxModel: DropBoxViewModel?
     private var dragMonitor: SystemDragMonitor?
     private var autoShow: DropBoxAutoShow?
+    private let watchdog = MainThreadWatchdog()
 
     public override init() { super.init() }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        Log.shared.configure()
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+        Log.shared.info("MiniBrain \(version) launched (macOS \(ProcessInfo.processInfo.operatingSystemVersionString))")
+        watchdog.start()
         NSApp.setActivationPolicy(preferences.dockMode == .always ? .regular : .accessory)
         NSApp.appearance = preferences.appearance.nsAppearance
         Theme.accentChoice = preferences.accentColor
@@ -94,10 +99,22 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
             // MINIBRAIN_DATA_DIR env > Settings location > Application Support.
             let env = try AppEnvironment.live(baseDirectory: AppPreferences.libraryBaseDirectory())
             environment = env
+            Log.shared.info("Library at \(env.paths.baseDirectory.path)")
             _ = try? env.repository.purgeTrash(blobs: env.blobs)
-            Task { try? await env.worker.start() }
+            // Previews, titles and tags arrive after the save: refresh the
+            // library as each background job finishes (coalesced).
+            let onJobFinished: @Sendable (String, EnrichmentKind, Bool) -> Void = { [weak self] _, _, _ in
+                Task { @MainActor in self?.libraryModel?.scheduleRefresh() }
+            }
+            Task {
+                await env.worker.setOnJobFinished(onJobFinished)
+                do { try await env.worker.start() } catch {
+                    Log.shared.error("Enrichment worker failed to start: \(error)", "enrichment")
+                }
+            }
         } catch {
             startupError = error.localizedDescription
+            Log.shared.error("Startup failed: \(error)")
         }
         state.presenter = self
         let registrar = HotkeyRegistrarFactory.make()
@@ -129,6 +146,9 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        Log.shared.info("MiniBrain quitting")
+        watchdog.stop()
+        Log.shared.flush()
         registrar?.unregisterAll()
         dragMonitor?.stop()
         if let worker = environment?.worker { Task { await worker.stop() } }

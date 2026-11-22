@@ -169,7 +169,8 @@ public final class DropBoxViewModel {
         do {
             let item = try await capturer.save(payload, customTypeID: type?.id)
             onSaved?(item)
-            if let type, !type.fields.isEmpty {
+            if let type {
+                // Always ask for a name when filing into a custom type.
                 state = .editingFields(item: item, type: type)
             } else {
                 finish(.saved(title: type.map { "to \($0.name)" } ?? item.title))
@@ -184,11 +185,11 @@ public final class DropBoxViewModel {
         state = .idle
     }
 
-    /// Saves the field form shown after a ⇧-drop.
-    public func saveFields(_ values: [String: String]) {
+    /// Saves the name + field form shown after dropping into a type.
+    public func saveFields(_ values: [String: String], title: String? = nil) {
         guard case .editingFields(let item, let type) = state else { return }
         do {
-            if let updated = try customTypes?.setFieldValues(values, for: item.id) { onSaved?(updated) }
+            if let updated = try customTypes?.setFieldValues(values, title: title, for: item.id) { onSaved?(updated) }
             finish(.saved(title: "to \(type.name)"))
         } catch {
             finish(.error(Self.message(for: error)))

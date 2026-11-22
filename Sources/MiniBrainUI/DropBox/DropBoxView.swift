@@ -296,29 +296,45 @@ struct FieldsFormView: View {
     let model: DropBoxViewModel
     let item: Item
     let type: CustomType
+    @State private var name = ""
     @State private var values: [String: String] = [:]
+    @FocusState private var nameFocused: Bool
+
+    /// Fields other than the "Name"/"Title" one — that one is the Name box.
+    private var otherFields: [FieldDefinition] {
+        let nameID = type.nameField?.id
+        return type.fields.filter { $0.id != nameID }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(type.name).font(.headline)
-                Text(item.title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Text("Add to \(type.name)").font(.headline)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Name").font(.caption.weight(.medium)).foregroundStyle(Theme.secondary)
+                TextField("Name", text: $name, prompt: Text("Name").foregroundStyle(Theme.tertiary))
+                    .labelsHidden()
+                    .textFieldStyle(.plain)
+                    .focused($nameFocused)
+                    .formFieldChrome(focused: nameFocused)
+                    .onSubmit(save)
             }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(type.fields) { field in
-                        FieldEditor(field: field, value: binding(field.id))
+            if !otherFields.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(otherFields) { field in
+                            FieldEditor(field: field, value: binding(field.id))
+                        }
                     }
                 }
+                .frame(maxHeight: 300)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxHeight: 340)
-            .fixedSize(horizontal: false, vertical: true)
             Divider()
             HStack {
                 Button("Skip") { model.skipFields() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Save") { model.saveFields(values) }
+                Button("Save", action: save)
                     .keyboardShortcut(.defaultAction)
             }
             .controlSize(.small)
@@ -327,9 +343,13 @@ struct FieldsFormView: View {
         .frame(width: 320)
         .onAppear {
             values = item.fieldValues
+            name = type.nameField.flatMap { item.fieldValues[$0.id] } ?? item.title
             focusPanel()
+            DispatchQueue.main.async { nameFocused = true }
         }
     }
+
+    private func save() { model.saveFields(values, title: name) }
 
     func binding(_ id: String) -> Binding<String> {
         Binding(get: { values[id] ?? "" }, set: { values[id] = $0 })

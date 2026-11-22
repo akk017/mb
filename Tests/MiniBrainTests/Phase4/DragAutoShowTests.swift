@@ -5,6 +5,34 @@ import Testing
 
 @Suite @MainActor struct DragWatcherTests {
 
+    /// Querying pasteboard types is a blocking call to the pasteboard server;
+    /// idle ticks (no click, or unchanged pasteboard) must not make it.
+    @Test func pollerSkipsPasteboardWhileIdle() {
+        var idle = 0
+        var reads = 0
+        for _ in 0..<70 {
+            if !SystemDragMonitor.shouldSkipPasteboard(mouseDown: false, wasMouseDown: false, isDragging: false, idleTicks: &idle) { reads += 1 }
+        }
+        #expect(reads == 10) // ~1 s apart at 0.15 s ticks, not every tick
+        // Mouse down, the release tick, and active drags always read.
+        #expect(!SystemDragMonitor.shouldSkipPasteboard(mouseDown: true, wasMouseDown: false, isDragging: false, idleTicks: &idle))
+        #expect(!SystemDragMonitor.shouldSkipPasteboard(mouseDown: false, wasMouseDown: true, isDragging: false, idleTicks: &idle))
+        #expect(!SystemDragMonitor.shouldSkipPasteboard(mouseDown: false, wasMouseDown: false, isDragging: true, idleTicks: &idle))
+    }
+
+    @Test func idleTicksNeverQueryPasteboardTypes() {
+        let w = DragWatcher(initialChangeCount: 10)
+        var queries = 0
+        func probe() -> Bool { queries += 1; return true }
+        for _ in 0..<50 { w.sample(mouseDown: false, changeCount: 10, hasContent: probe()) }
+        w.sample(mouseDown: false, changeCount: 12, hasContent: probe()) // copy elsewhere, no click
+        for _ in 0..<20 { w.sample(mouseDown: true, changeCount: 12, hasContent: probe()) } // click-hold, same pasteboard
+        #expect(queries == 0)
+        w.sample(mouseDown: true, changeCount: 13, hasContent: probe()) // real drag start
+        #expect(queries == 1)
+        #expect(w.isDragging)
+    }
+
     @Test func newDragPasteboardWhileMouseDownStartsDrag() {
         var events: [String] = []
         let w = DragWatcher(initialChangeCount: 10)

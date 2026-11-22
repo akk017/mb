@@ -133,6 +133,14 @@ public final class StorageSettings {
 
     public func revealInFinder() { hooks.reveal(paths.baseDirectory) }
 
+    /// Diagnostics log folder (always Application Support/MiniBrain/Logs).
+    public var logsDirectory: URL { Log.shared.fileURL?.deletingLastPathComponent() ?? Log.defaultDirectory }
+
+    public func revealLogs() {
+        let file = logsDirectory.appendingPathComponent(Log.fileName)
+        hooks.reveal(FileManager.default.fileExists(atPath: file.path) ? file : logsDirectory)
+    }
+
     public func chooseNewLocation() {
         guard let folder = hooks.chooseFolder() else { return }
         move(to: folder)

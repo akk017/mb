@@ -14,6 +14,7 @@ Code references: `Sources/MiniBrainCore/Storage/`, `Enrichment/`, `Semantic/Vect
 | Database | `<library>/brain.db` (+ `brain.db-wal`, `brain.db-shm`) |
 | Files (images, PDFs, previews) | `<library>/blobs/<first 2 hex of hash>/<sha256>.<ext>` |
 | Preferences | `~/Library/Preferences/app.minibrain.MiniBrain.plist` (UserDefaults) |
+| Logs | `~/Library/Application Support/MiniBrain/Logs/minibrain.log` (always here, even when the library is moved) |
 
 **Choosing the library folder** (`AppPreferences.libraryBaseDirectory`), first match wins:
 1. `MINIBRAIN_DATA_DIR` environment variable (dev/testing).
@@ -21,6 +22,12 @@ Code references: `Sources/MiniBrainCore/Storage/`, `Enrichment/`, `Semantic/Vect
 3. The default above.
 
 Folders are created on launch if missing (`AppPaths.ensureDirectories`, idempotent).
+
+**Logs** (`Log.shared`, configured at launch; Settings › Storage › Diagnostics › Show Logs in Finder):
+- **Format:** one line per event: `<ISO-8601 UTC time> <LEVEL> [<category>] <message>`. Levels: DEBUG, INFO, WARN, ERROR. Also mirrored to the unified system log (subsystem `app.minibrain`).
+- **Categories:** `app` (launch, library path, quit, startup errors), `capture` (item id, type, host, byte size, queued jobs), `enrichment` (each job: kind, item id, duration, error and attempts on failure), `link-preview` (host, whether a title/image came back and its size, fetch/image errors), `watchdog` (main thread unresponsive ≥ 2 s, and how long until it recovered), `loop` (a UI event such as a hover or window-width change firing > 30×/s — names the view).
+- **Rotation:** at 2 MB `minibrain.log` → `minibrain.1.log` → `minibrain.2.log` → `minibrain.3.log` (oldest dropped).
+- **Privacy:** never item contents, clipboard data, titles or full URLs — only ids, kinds, hosts, sizes, timings and errors. Tests never write here (the logger stays off until configured).
 
 **Moving the library** (Settings › Storage › Change… / Use Default, `LibraryMover`):
 - **If the target has no `brain.db`:** the database is copied with SQLite's online backup (a consistent snapshot, WAL included), then all blob shards are copied.

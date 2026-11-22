@@ -98,8 +98,10 @@ public struct CaptureService: Sendable {
         } catch {
             // DB rolled back; don't leave an orphan file behind.
             if createdBlob, let blobHash { _ = try? blobs.deleteIfUnreferenced(blobHash, database: database) }
+            Log.shared.error("capture failed type=\(item.type.rawValue): \(error)", "capture")
             throw error
         }
+        Log.shared.info("captured item=\(item.id) type=\(item.type.rawValue)\(item.url.flatMap { URL(string: $0)?.host }.map { " host=\($0)" } ?? "") bytes=\(detected.data?.count ?? 0) jobs=\(kinds.map(\.rawValue).joined(separator: ","))\(customTypeID != nil ? " customType" : "")", "capture")
         if !kinds.isEmpty { notifier?.enrichmentJobsAvailable() }
         return item
     }

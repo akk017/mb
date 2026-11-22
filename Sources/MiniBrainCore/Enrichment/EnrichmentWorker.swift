@@ -65,12 +65,15 @@ public actor EnrichmentWorker: EnrichmentNotifying {
     private var loop: Task<Void, Never>?
     private var waiter: CheckedContinuation<Void, Never>?
     private var pendingWake = false
+    private var onJobFinished: (@Sendable (_ itemID: String, _ kind: EnrichmentKind, _ succeeded: Bool) -> Void)?
+    private let log: Log
 
     public init(
         database: AppDatabase, blobs: BlobStore, clock: any Clock = SystemClock(),
         processors: [any EnrichmentProcessor], maxAttempts: Int = 3,
-        baseBackoff: TimeInterval = 30, idlePoll: TimeInterval = 60
+        baseBackoff: TimeInterval = 30, idlePoll: TimeInterval = 60, log: Log = .shared
     ) {
+        self.log = log
         self.database = database
         self.blobs = blobs
         self.clock = clock
@@ -81,6 +84,12 @@ public actor EnrichmentWorker: EnrichmentNotifying {
     }
 
     // MARK: - Public API
+
+    /// Called after every job finishes (success or failure), off the main
+    /// thread. The library uses it to show previews/titles as they arrive.
+    public func setOnJobFinished(_ handler: (@Sendable (_ itemID: String, _ kind: EnrichmentKind, _ succeeded: Bool) -> Void)?) {
+        onJobFinished = handler
+    }
 
     /// Re-arms interrupted jobs and starts the background loop.
     public func start() throws {
@@ -161,6 +170,8 @@ public actor EnrichmentWorker: EnrichmentNotifying {
 
     private func run(_ job: EnrichmentJob) async {
         guard let jobID = job.id else { return }
+        let started = Date()
+        func elapsed() -> String { String(format: "%.2fs", Date().timeIntervalSince(started)) }
         do {
             guard let item = try await database.writer.read({ db in try Item.fetchOne(db, key: job.itemID) }) else {
                 // Item vanished between claim and run; cascade will remove the row.
@@ -182,6 +193,8 @@ public actor EnrichmentWorker: EnrichmentNotifying {
             for hash in result.obsoleteBlobs {
                 _ = try? blobs.deleteIfUnreferenced(hash, database: database)
             }
+            log.info("\(job.kind.rawValue) done item=\(job.itemID) in \(elapsed())", "enrichment")
+            onJobFinished?(job.itemID, job.kind, true)
         } catch {
             let now = clock.now
             let message = String(describing: error)
@@ -190,6 +203,8 @@ public actor EnrichmentWorker: EnrichmentNotifying {
                 try EnrichmentQueue.markFailed(
                     jobID, error: message, now: now, maxAttempts: maxAttempts, baseBackoff: baseBackoff, in: db)
             }
+            log.error("\(job.kind.rawValue) failed item=\(job.itemID) attempts=\(job.attempts) in \(elapsed()): \(message)", "enrichment")
+            onJobFinished?(job.itemID, job.kind, false)
         }
     }
 

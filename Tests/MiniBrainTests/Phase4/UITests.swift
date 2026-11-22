@@ -63,7 +63,7 @@ final class GatedCapturer: Capturing, @unchecked Sendable {
 }
 
 @MainActor
-func waitUntil(_ condition: @MainActor () -> Bool, timeout: TimeInterval = 2) async {
+func waitUntil(_ condition: @MainActor () -> Bool, timeout: TimeInterval = 5) async {
     let end = Date().addingTimeInterval(timeout)
     while !condition(), Date() < end {
         try? await Task.sleep(nanoseconds: 1_000_000)

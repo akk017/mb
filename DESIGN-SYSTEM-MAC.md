@@ -46,46 +46,46 @@ hex. Hues are OKLCH, converted to sRGB at runtime (see §2.6).
 | gray-90 | `#1C1B22` |
 | gray-100 | `#15141A` |
 
-### 2.2 Blue-grey ramp (matches the logo)
+### 2.2 Slate scale (neutrals)
 
-The app is tuned to the blue-grey logo (hue ~205–210°). The Firefox gray ramp
-above is violet-tinted, so surfaces use **`gray-30` `#BAC2CA`** (the json's
-blue-grey neutral, hue 210) and **`blue-110` `oklch(20% .05 260)`**, layered with
-the json's `white/black alpha` tokens. Every value traces back to the json.
+Neutrals use the **Slate** scale (OKLCH, a cool blue-grey that matches the logo). The
+violet-tinted Firefox grays in §2.1 are no longer used for surfaces.
 
-| Name | Built from (json tokens) | Hex |
+| Step | OKLCH | Hex |
 |---|---|---|
-| slate-50 | white.alpha.90 over gray-30 | `#F8F9FA` |
-| slate-100 | white.alpha.80 over gray-30 | `#F1F3F4` |
-| slate-150 | white.alpha.70 over gray-30 | `#EAEDEF` |
-| slate-250 | white.alpha.50 over gray-30 | `#DCE0E4` |
-| slate-600 | black.alpha.30 over gray-30 | `#82888D` |
-| slate-700 | black.alpha.50 over gray-30 | `#5D6165` |
-| ink-800 | blue-110 + white.alpha.20 | `#394456` |
-| ink-850 | blue-110 + white.alpha.10 | `#212D41` |
-| ink-900 | ink-850 + black.alpha.30 | `#171F2E` |
+| 50 | `oklch(98.4% 0.003 247.858)` | `#F8FAFC` |
+| 100 | `oklch(96.8% 0.007 247.896)` | `#F1F5F9` |
+| 200 | `oklch(92.9% 0.013 255.508)` | `#E2E8F0` |
+| 300 | `oklch(86.9% 0.022 252.894)` | `#CAD5E2` |
+| 400 | `oklch(70.4% 0.04 256.788)` | `#90A1B9` |
+| 500 | `oklch(55.4% 0.046 257.417)` | `#62748E` |
+| 600 | `oklch(44.6% 0.043 257.281)` | `#45556C` |
+| 700 | `oklch(37.2% 0.044 257.287)` | `#314158` |
+| 800 | `oklch(27.9% 0.041 260.031)` | `#1D293D` |
+| 900 | `oklch(20.8% 0.042 265.755)` | `#0F172B` |
+| 950 | `oklch(12.9% 0.042 264.695)` | `#020618` |
 
 ### 2.3 Semantic tokens
 
 | Token | Light | Dark | Used for |
 |---|---|---|---|
-| `sidebar` | slate-150 | ink-850 | Sidebar background |
-| `content` | slate-50 | ink-900 | Main content / gallery background |
-| `panel` | slate-50 | ink-850 | Detail panel, popovers, floating panel |
-| `card` | white | ink-850 | Cards, dropdown menus |
+| `sidebar` | slate-100 | slate-900 | Sidebar background |
+| `content` | slate-50 | **slate-950** | Main content / gallery background |
+| `panel` | slate-50 | slate-900 | Detail panel, popovers, floating panel |
+| `card` | white | slate-900 | Cards, dropdown menus |
 | `cardBorder` | black 10% | white 10% | 1px card outline |
-| `thumbBackground` | slate-100 | ink-900 | Letterbox behind images |
+| `thumbBackground` | slate-100 | slate-950 | Letterbox behind images |
 | `hover` | black 5% | white 6% | Row/value hover fill |
 | `selectedRow` | black 10% | white 10% | Selected sidebar row, list highlight |
 | `divider` | black 10% | white 10% | 1px separators, field borders |
 | `field` | black 5% | white 10% | Text-field / search fill |
-| `primary` | ink-850 | gray-0 `#FBFBFE` | Main text |
-| `secondary` | slate-700 | **gray-30** `#BAC2CA` | Labels, property names, secondary icons |
-| `tertiary` | slate-600 | white.alpha.40 over ink-900 | Placeholders, "Empty", hints |
-| `accent` | blue-60 `#0062FA` | cyan-30 `#00CADB` | json `accent.primary` — selection, focus, tint |
-| `onAccent` | white | ink-900 | Text on accent fill |
+| `primary` | slate-900 | slate-50 | Main text |
+| `secondary` | slate-600 | slate-400 | Labels, property names, secondary icons |
+| `tertiary` | slate-500 | slate-500 | Placeholders, "Empty", hints |
+| `accent` | json accent / chosen hue (§2.3a) | | Selection, focus, tint |
+| `onAccent` | white | slate-950 | Text on accent fill |
 | `attention` | `#2AC3A2` | `#54FFBD` | Success ("Saved") |
-| tag gray (palette #0) | slate-250 / ink-850 text | ink-800 / gray-0 text | Neutral chips, badges |
+| tag gray (palette #0) | slate-200 / slate-800 text | slate-800 / slate-50 text | Neutral chips, badges |
 
 Rules:
 - Selection is shown with an **accent border** (2px on cards, 1.5px on fields), never an accent fill on large surfaces.
@@ -118,7 +118,7 @@ Index 0 is neutral gray. Indexes 1–9 are hues from the json OKLCH ramps.
 
 | # | Hue | h | Light bg | Light text | Dark bg | Dark text |
 |---|---|---|---|---|---|---|
-| 0 | gray | — | slate-250 | ink-850 | ink-800 | gray-0 |
+| 0 | gray | — | slate-200 | slate-800 | slate-800 | slate-50 |
 | 1 | red | 15 | `#FFC3C9` | `#90002B` | `#6E001F` | `#FFC3C9` |
 | 2 | orange | 50 | `#FFCBA2` | `#8C1800` | `#6B1100` | `#FFCBA2` |
 | 3 | yellow | 90 | `#F8DC90` | `#6E4000` | `#542F00` | `#F8DC90` |
@@ -156,35 +156,35 @@ enum Theme {
                        blue: b.blueComponent * (1 - a) + t.blueComponent * a, alpha: 1)
     }
 
-    static let gray0 = hex(0xFBFBFE), gray30 = hex(0xBAC2CA), white = hex(0xFFFFFF)
-    static let blue110 = OKLCH.color(20, 0.05, 260)
-    static let slate50 = over(gray30, white, 0.90), slate100 = over(gray30, white, 0.80)
-    static let slate150 = over(gray30, white, 0.70), slate250 = over(gray30, white, 0.50)
-    static let slate600 = over(gray30, black(1), 0.30), slate700 = over(gray30, black(1), 0.50)
-    static let ink800 = over(blue110, white, 0.20), ink850 = over(blue110, white, 0.10)
-    static let ink900 = over(ink850, black(1), 0.30)
+    static let white = hex(0xFFFFFF)
+    // Slate scale
+    static let slate50 = OKLCH.color(98.4, 0.003, 247.858), slate100 = OKLCH.color(96.8, 0.007, 247.896)
+    static let slate200 = OKLCH.color(92.9, 0.013, 255.508), slate400 = OKLCH.color(70.4, 0.040, 256.788)
+    static let slate500 = OKLCH.color(55.4, 0.046, 257.417), slate600 = OKLCH.color(44.6, 0.043, 257.281)
+    static let slate800 = OKLCH.color(27.9, 0.041, 260.031), slate900 = OKLCH.color(20.8, 0.042, 265.755)
+    static let slate950 = OKLCH.color(12.9, 0.042, 264.695)
 
-    static let sidebar = dynamic(light: slate150, dark: ink850)
-    static let content = dynamic(light: slate50, dark: ink900)
-    static let panel = dynamic(light: slate50, dark: ink850)
-    static let card = dynamic(light: white, dark: ink850)
+    static let sidebar = dynamic(light: slate100, dark: slate900)
+    static let content = dynamic(light: slate50, dark: slate950)
+    static let panel = dynamic(light: slate50, dark: slate900)
+    static let card = dynamic(light: white, dark: slate900)
     static let cardBorder = dynamic(light: black(0.10), dark: white(0.10))
-    static let thumbBackground = dynamic(light: slate100, dark: ink900)
+    static let thumbBackground = dynamic(light: slate100, dark: slate950)
     static let hover = dynamic(light: black(0.05), dark: white(0.06))
     static let selectedRow = dynamic(light: black(0.10), dark: white(0.10))
     static let divider = dynamic(light: black(0.10), dark: white(0.10))
     static let field = dynamic(light: black(0.05), dark: white(0.10))
-    static let primary = dynamic(light: ink850, dark: gray0)
-    static let secondary = dynamic(light: slate700, dark: gray30)
-    static let tertiary = dynamic(light: slate600, dark: over(ink900, white, 0.40))
+    static let primary = dynamic(light: slate900, dark: slate50)
+    static let secondary = dynamic(light: slate600, dark: slate400)
+    static let tertiary = dynamic(light: slate500, dark: slate500)
     static let accent = dynamic(light: OKLCH.color(55, 0.24, 260), dark: OKLCH.color(76, 0.14, 205))
     static let attention = dynamic(light: hex(0x2AC3A2), dark: hex(0x54FFBD))
-    static let onAccent = dynamic(light: white, dark: ink900)
+    static let onAccent = dynamic(light: white, dark: slate950)
 
     static let tagHues: [Double] = [15, 50, 90, 145, 205, 260, 290, 315, 360]
-    static let tagBackgrounds: [Color] = [dynamic(light: slate250, dark: ink800)]
+    static let tagBackgrounds: [Color] = [dynamic(light: slate200, dark: slate800)]
         + tagHues.map { dynamic(light: OKLCH.color(90, 0.10, $0), dark: OKLCH.color(34, 0.14, $0)) }
-    static let tagForegrounds: [Color] = [dynamic(light: ink850, dark: gray0)]
+    static let tagForegrounds: [Color] = [dynamic(light: slate800, dark: slate50)]
         + tagHues.map { dynamic(light: OKLCH.color(41, 0.17, $0), dark: OKLCH.color(90, 0.10, $0)) }
 }
 

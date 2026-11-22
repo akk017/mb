@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Priority: PDF > image > URL > HTML > plain text. URL wins over text because
 /// browsers put both on the pasteboard for a dragged link. Plain text that is
-/// only an http(s) URL becomes a link.
+/// only an http(s) URL (or a schemeless web address like www.x.com/…) becomes a link.
 public enum TypeDetector {
     public static let maxTitleLength = 80
 
@@ -62,13 +62,41 @@ public enum TypeDetector {
             meta: ["host": .string(host)])
     }
 
-    /// Returns the URL when `text` is exactly one http(s) URL.
+    /// Returns the URL when `text` is exactly one http(s) URL — or one
+    /// web address typed without a scheme ("www.imdb.com/title/tt1"), which
+    /// gets https://.
     public static func singleURL(in text: String) -> URL? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
-              let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https", let host = url.host, !host.isEmpty
+        guard !trimmed.isEmpty, trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
+        if let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
+           scheme == "http" || scheme == "https", let host = url.host, !host.isEmpty {
+            return url
+        }
+        return schemelessWebURL(trimmed)
+    }
+
+    /// Common web TLDs: a bare "name.tld" (no www., no path) only counts as a
+    /// link for these, so file names like "notes.txt" / "README.md" stay text.
+    static let commonWebTLDs: Set<String> = [
+        "com", "org", "net", "io", "dev", "app", "ai", "co", "edu", "gov", "me", "info", "biz", "tv",
+        "xyz", "sh", "gg", "fm", "ly", "us", "uk", "in", "de", "fr", "jp", "ca", "au", "nl", "eu", "ch",
+        "se", "es", "it", "br", "kr", "tech", "site", "blog", "page", "news", "so", "to",
+    ]
+
+    /// "www.x.com/…", "x.com/path", or "x.<common tld>" → https URL; else nil.
+    static func schemelessWebURL(_ text: String) -> URL? {
+        guard !text.contains("://"), !text.contains("@"), let first = text.first, first.isLetter || first.isNumber
         else { return nil }
+        let hostEnd = text.firstIndex { "/?#".contains($0) } ?? text.endIndex
+        let host = text[..<hostEnd].lowercased()
+        let hasPath = hostEnd != text.endIndex
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2, labels.allSatisfy({ label in
+            !label.isEmpty && label.count <= 63 && !label.hasPrefix("-") && !label.hasSuffix("-")
+                && label.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+        }), let tld = labels.last, tld.count >= 2, tld.allSatisfy(\.isLetter) else { return nil }
+        guard host.hasPrefix("www.") || hasPath || commonWebTLDs.contains(String(tld)) else { return nil }
+        guard let url = URL(string: "https://" + text), url.host != nil else { return nil }
         return url
     }
 

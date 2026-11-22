@@ -64,3 +64,15 @@
 - Fix: smooth detail-panel resizing — drag only re-lays-out the panel (not sidebar/gallery), grab area on top of content, no per-card resting shadows or offscreen masks, cheaper preview scaling while dragging; perf test keeps drag frames in budget.
 - Theme: blue-grey to match the logo — surfaces from json gray-30 and blue-110 layered with json white/black alpha (replaces violet-tinted Firefox grays); accent unchanged (json accent.primary).
 - Settings › General › Appearance: Theme (System / Light / Dark) and Accent (Default, 9 json hues using json's step-60/step-30 accent rule, or macOS accent); applies live.
+- Theme: darker Slate neutrals (Tailwind slate OKLCH scale) — dark content slate-950, sidebar/panel slate-900; light slate-50/100.
+- Fix: panel resize handle rebuilt in AppKit — drag keeps tracking when the pointer outruns the edge, resize cursor never flickers or sticks, double-click resets.
+- Gallery cards no longer show extracted PDF text (or OCR text unless enabled) on the info line.
+- Dropping into a custom type always asks for a Name (prefilled, focused, Return saves); it becomes the title and fills a "Name"/"Title" field.
+- Fix: gallery card URL line could render mirrored/upside-down; it is now a plain label (click selects the card), the detail panel keeps the clickable link.
+- Fix: app could freeze ("not responding") when another app stalled the system pasteboard — the drag watcher no longer queries the pasteboard on idle ticks (only while the mouse is down / dragging, ~1×/s otherwise). PDF thumbnails keep their document alive while drawing.
+- Fix: library froze ("Not Responding") with System Settings › Show scroll bars = Always — auto-hiding legacy scrollers could flip on/off every layout pass (content height depends on width); library scroll views now use overlay scrollers.
+- Logs: `~/Library/Application Support/MiniBrain/Logs/minibrain.log` (rotated, 2 MB × 4) — captures, every enrichment job with timing/errors, link-preview fetch results, and a main-thread watchdog that logs freezes; Settings › Storage › Show Logs in Finder.
+- Fix: library now refreshes as background jobs finish, so link previews (e.g. IMDb posters) and fetched titles appear within seconds instead of only after reopening the window.
+- Capture: a web address without a scheme (e.g. `www.imdb.com/title/tt2187153/`, `github.com`) is now saved as a Link with https:// — previously it became a Text note with no preview. File-name lookalikes (`notes.txt`, `README.md`), emails and sentences stay text.
+- Fix (freeze, continued): detail-panel width is always whole points (a saved 496.89 pt width let SwiftUI and AppKit pixel alignment fight forever) and sub-point window-width jitter is ignored. Diagnostics: `loop` log entries name any hover/width event firing > 30×/s.
+- Preview panel title autosaves 0.6 s after you stop typing (no Return needed); Return saves immediately; switching item/closing the panel saves a pending edit. Blank or unchanged titles are not written.

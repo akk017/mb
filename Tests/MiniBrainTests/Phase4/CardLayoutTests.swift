@@ -35,3 +35,28 @@ import Testing
         #expect(heights[0] > 200) // thumbnail 170 + footer
     }
 }
+
+@Suite struct CardInfoLineTests {
+    let now = Date()
+
+    @Test func pdfNeverShowsExtractedText() {
+        let pdf = Item(type: .pdf, title: "GATE 2027", content: "Gate Prep Akash K 28 Jun 2026 1 Weightage", createdAt: now)
+        #expect(GalleryCard.infoLine(for: pdf, snippet: nil, showsRecognizedText: true) == .blank)
+        #expect(GalleryCard.infoLine(for: pdf, snippet: "Gate <mark>Prep</mark>", showsRecognizedText: true) == .blank)
+    }
+
+    @Test func imageOCRTextOnlyWhenEnabled() {
+        let image = Item(type: .image, title: "Shot", content: "public init()", createdAt: now)
+        #expect(GalleryCard.infoLine(for: image, snippet: "<mark>public</mark> init", showsRecognizedText: false) == .blank)
+        #expect(GalleryCard.infoLine(for: image, snippet: "<mark>public</mark> init", showsRecognizedText: true)
+                == .snippet("<mark>public</mark> init"))
+    }
+
+    @Test func urlWinsAndTextNotesKeepSnippets() {
+        let link = Item(type: .link, title: "k", content: "page text", url: "https://karpenter.sh/", createdAt: now)
+        #expect(GalleryCard.infoLine(for: link, snippet: "page", showsRecognizedText: true) == .url("https://karpenter.sh/"))
+        let note = Item(type: .text, title: "n", content: "remember the walnut", createdAt: now)
+        #expect(GalleryCard.infoLine(for: note, snippet: "<mark>walnut</mark>", showsRecognizedText: false) == .snippet("<mark>walnut</mark>"))
+        #expect(GalleryCard.infoLine(for: note, snippet: nil, showsRecognizedText: false) == .blank)
+    }
+}

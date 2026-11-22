@@ -252,31 +252,36 @@ struct FakeLinkFetcher: LinkPreviewFetching {
     }
 }
 
-@Suite struct BlueGreyThemeTests {
+@Suite struct SlateThemeTests {
     func hex(_ c: NSColor) -> String {
         let s = c.usingColorSpace(.sRGB)!
         return String(format: "#%02X%02X%02X", Int((s.redComponent * 255).rounded()),
                       Int((s.greenComponent * 255).rounded()), Int((s.blueComponent * 255).rounded()))
     }
 
-    @Test func surfacesDeriveFromJsonTokens() {
-        #expect(hex(Theme.gray30) == "#BAC2CA")      // json color.gray.30
-        #expect(hex(Theme.slate50) == "#F8F9FA")     // white.90 over gray-30
-        #expect(hex(Theme.slate150) == "#EAEDEF")    // white.70 over gray-30
-        #expect(hex(Theme.slate700) == "#5D6165")    // black.50 over gray-30
-        #expect(hex(Theme.blue110) == "#08152C")     // json color.blue.110
-        #expect(hex(Theme.ink850) == "#212D41")      // blue-110 + white.10
-        #expect(hex(Theme.ink900) == "#171F2E")      // + black.30
+    @Test func slateScaleResolvesToExpectedHex() {
+        let expected: [(NSColor, String)] = [
+            (Theme.slate50, "#F8FAFC"), (Theme.slate100, "#F1F5F9"), (Theme.slate200, "#E2E8F0"),
+            (Theme.slate300, "#CAD5E2"), (Theme.slate400, "#90A1B9"), (Theme.slate500, "#62748E"),
+            (Theme.slate600, "#45556C"), (Theme.slate700, "#314158"), (Theme.slate800, "#1D293D"),
+            (Theme.slate900, "#0F172B"), (Theme.slate950, "#020618"),
+        ]
+        for (color, value) in expected { #expect(hex(color) == value) }
     }
 
-    @Test func surfacesAreBlueGreyNotPurple() {
-        // Blue channel leads red (cool) and hue sits in the logo's 200–225° range.
-        for c in [Theme.slate50, Theme.slate150, Theme.slate700, Theme.ink850, Theme.ink900] {
+    @Test func surfacesAreCoolSlateNotPurple() {
+        for c in [Theme.slate100, Theme.slate500, Theme.slate800, Theme.slate900, Theme.slate950] {
             let s = c.usingColorSpace(.sRGB)!
             var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0
             s.getHue(&h, saturation: &sat, brightness: &b, alpha: nil)
             #expect(s.blueComponent > s.redComponent)
-            #expect((200...225).contains(h * 360), "hue \(h * 360) for \(hex(c))")
+            #expect((205...235).contains(h * 360), "hue \(h * 360) for \(hex(c))")
         }
+    }
+
+    @Test func darkModeIsDarkerThanBefore() {
+        // Dark content background is near-black slate (luminance well under the old #171F2E).
+        let s = Theme.slate950.usingColorSpace(.sRGB)!
+        #expect(s.redComponent + s.greenComponent + s.blueComponent < 0.2)
     }
 }

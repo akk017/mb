@@ -19,11 +19,14 @@ public final class DragWatcher {
     }
 
     /// Feed one sample: mouse button state + current drag pasteboard state.
-    public func sample(mouseDown: Bool, changeCount: Int, hasContent: Bool) {
+    /// `hasContent` is only evaluated when a new drag may be starting — it is
+    /// a synchronous round-trip to the pasteboard server, which can stall
+    /// when another app hangs, so it must not run on every idle tick.
+    public func sample(mouseDown: Bool, changeCount: Int, hasContent: @autoclosure () -> Bool) {
         if mouseDown {
             guard !isDragging, changeCount != lastChangeCount else { return }
             lastChangeCount = changeCount
-            guard hasContent else { return }
+            guard hasContent() else { return }
             isDragging = true
             onDragStart?()
         } else {
@@ -61,10 +64,28 @@ public final class SystemDragMonitor {
         timer = nil
     }
 
+    private var wasMouseDown = false
+    private var idleTicks = 0
+
     private func poll() {
         let mouseDown = NSEvent.pressedMouseButtons & 1 != 0
+        // Pasteboard reads are synchronous calls to the pasteboard server and
+        // stall when another app hogs it, so skip them while nothing can be
+        // dragging: mouse up, no drag in progress → only ~once a second.
+        if Self.shouldSkipPasteboard(mouseDown: mouseDown, wasMouseDown: wasMouseDown,
+                                     isDragging: watcher.isDragging, idleTicks: &idleTicks) { return }
+        wasMouseDown = mouseDown
         watcher.sample(mouseDown: mouseDown, changeCount: pasteboard.changeCount,
                        hasContent: !(pasteboard.types ?? []).isEmpty)
+    }
+
+    /// True when this tick can skip touching the pasteboard.
+    static func shouldSkipPasteboard(mouseDown: Bool, wasMouseDown: Bool, isDragging: Bool,
+                                     idleTicks: inout Int, idleEvery: Int = 7) -> Bool {
+        if mouseDown || wasMouseDown || isDragging { idleTicks = 0; return false }
+        idleTicks += 1
+        if idleTicks >= idleEvery { idleTicks = 0; return false }
+        return true
     }
 }
 

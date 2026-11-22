@@ -37,12 +37,18 @@ import Testing
         #expect(vm.state == .saved(title: "to Products"))
     }
 
-    @Test func dropOnFieldlessTypeSavesDirectly() async throws {
+    @Test func dropOnFieldlessTypeAsksForName() async throws {
         let (env, repo, vm) = try make()
         let inbox = try repo.create(name: "Inbox")
         #expect(await vm.drop([NSItemProvider(object: "note" as NSString)], into: inbox))
-        #expect(vm.state == .saved(title: "to Inbox"))
+        guard case .editingFields(_, let type) = vm.state else {
+            Issue.record("expected name form, got \(vm.state)"); return
+        }
+        #expect(type.id == inbox.id)
         #expect(try env.repo.fetchAll().first?.customTypeID == inbox.id)
+        vm.saveFields([:], title: "Renamed")
+        #expect(vm.state == .saved(title: "to Inbox"))
+        #expect(try env.repo.fetchAll().first?.title == "Renamed")
     }
 
     @Test func badPayloadOnTypeZoneShowsError() async throws {

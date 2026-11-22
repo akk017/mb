@@ -49,6 +49,12 @@ public struct CustomType: Codable, Equatable, Hashable, Identifiable, Sendable, 
         case createdAt = "created_at"
     }
 
+    /// A Text field called "Name" or "Title" mirrors the item's name, so the
+    /// drop form asks once instead of showing two name boxes.
+    public var nameField: FieldDefinition? {
+        fields.first { $0.kind == .text && ["name", "title"].contains($0.name.trimmingCharacters(in: .whitespaces).lowercased()) }
+    }
+
     /// Normalizes a web-link value: adds https:// when no scheme is given.
     /// Returns nil when it can't be an http(s) URL.
     public static func webURL(from raw: String) -> URL? {
@@ -206,17 +212,22 @@ public struct CustomTypeRepository: Sendable {
 
     /// Replaces an item's field values (empty strings are dropped).
     @discardableResult
-    public func setFieldValues(_ values: [String: String], for itemID: String) throws -> Item {
+    /// Saves field values and, when `title` is non-blank, renames the item.
+    /// A type's "Name"/"Title" field follows the new title.
+    public func setFieldValues(_ values: [String: String], title: String? = nil, for itemID: String) throws -> Item {
         let now = clock.now
         return try database.writer.write { db in
             guard var item = try Item.fetchOne(db, key: itemID) else { throw MiniBrainError.notFound(itemID) }
-            let allowed: Set<String>? = try item.customTypeID
-                .flatMap { try CustomType.fetchOne(db, key: $0) }
-                .map { Set($0.fields.map(\.id)) }
+            let type = try item.customTypeID.flatMap { try CustomType.fetchOne(db, key: $0) }
+            let allowed: Set<String>? = type.map { Set($0.fields.map(\.id)) }
             var cleaned: [String: String] = [:]
             for (k, v) in values where allowed?.contains(k) ?? true {
                 let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !t.isEmpty { cleaned[k] = t }
+            }
+            if let name = title?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                item.title = name
+                if let field = type?.nameField { cleaned[field.id] = name }
             }
             item.fieldValues = cleaned
             item.updatedAt = now
