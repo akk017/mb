@@ -181,6 +181,10 @@ public final class AppPreferences {
         public static let appearance = "appearance"
         public static let accentColor = "accentColor"
         public static let dockMode = "dockMode"
+        public static let localAPIEnabled = "localAPI.enabled"
+        public static let localAPIPort = "localAPI.port"
+        public static let excludedApps = "dropBox.excludedApps"
+        public static let exclusionRule = "dropBox.exclusionRule"
         public static func shortcut(_ hotkey: Hotkey) -> String { "shortcut.\(hotkey.rawValue)" }
     }
 
@@ -227,6 +231,31 @@ public final class AppPreferences {
     public var dockMode: DockMode {
         didSet { defaults.set(dockMode.rawValue, forKey: Keys.dockMode) }
     }
+    /// Local HTTP API for scripts (127.0.0.1 only). Off by default.
+    public var localAPIEnabled: Bool {
+        didSet { defaults.set(localAPIEnabled, forKey: Keys.localAPIEnabled) }
+    }
+    public var localAPIPort: Int {
+        didSet { defaults.set(localAPIPort, forKey: Keys.localAPIPort) }
+    }
+    public static let defaultLocalAPIPort = 7777
+    /// Apps during which dragging doesn't pop up the drop box.
+    public private(set) var excludedApps: [ExcludedApp] = [] {
+        didSet { defaults.set((try? JSONEncoder().encode(excludedApps)) ?? Data(), forKey: Keys.excludedApps) }
+    }
+    public var exclusionRule: ExclusionRule {
+        didSet { defaults.set(exclusionRule.rawValue, forKey: Keys.exclusionRule) }
+    }
+    public var dropExclusions: DropExclusions { DropExclusions(apps: excludedApps, rule: exclusionRule) }
+
+    public func addExcludedApp(_ app: ExcludedApp) {
+        guard !excludedApps.contains(where: { $0.id == app.id }) else { return }
+        excludedApps.append(app)
+    }
+
+    public func removeExcludedApp(_ bundleID: String) {
+        excludedApps.removeAll { $0.id == bundleID.lowercased() }
+    }
     /// nil = default Application Support location.
     public var libraryPath: String? {
         didSet { defaults.set(libraryPath, forKey: Keys.libraryPath) }
@@ -247,6 +276,11 @@ public final class AppPreferences {
         appearance = defaults.string(forKey: Keys.appearance).flatMap(AppAppearance.init(rawValue:)) ?? .system
         accentColor = defaults.string(forKey: Keys.accentColor).flatMap(AccentChoice.init(rawValue:)) ?? .jsonDefault
         dockMode = defaults.string(forKey: Keys.dockMode).flatMap(DockMode.init(rawValue:)) ?? .always
+        localAPIEnabled = defaults.object(forKey: Keys.localAPIEnabled) as? Bool ?? false
+        let savedPort = defaults.integer(forKey: Keys.localAPIPort)
+        localAPIPort = (1024...65535).contains(savedPort) ? savedPort : Self.defaultLocalAPIPort
+        exclusionRule = defaults.string(forKey: Keys.exclusionRule).flatMap(ExclusionRule.init(rawValue:)) ?? .frontmost
+        excludedApps = defaults.data(forKey: Keys.excludedApps).flatMap { try? JSONDecoder().decode([ExcludedApp].self, from: $0) } ?? []
         for hotkey in Hotkey.allCases {
             let key = Keys.shortcut(hotkey)
             if defaults.object(forKey: key) == nil {

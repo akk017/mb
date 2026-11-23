@@ -180,6 +180,8 @@ public final class TypesSettings {
     public var draft: CustomType?
     public private(set) var error: String?
     @ObservationIgnored public var onChange: (() -> Void)?
+    /// CSV import/export for the selected type (nil when unavailable).
+    public var csv: CSVTransfer?
 
     public init(repository: CustomTypeRepository) {
         self.repository = repository
@@ -283,7 +285,7 @@ public final class TypesSettings {
 @MainActor
 @Observable
 public final class SettingsNavigation {
-    public enum Tab: Hashable { case general, shortcuts, types, storage, about }
+    public enum Tab: Hashable { case general, shortcuts, types, storage, api, about }
     public var tab: Tab = .general
     public init() {}
 }

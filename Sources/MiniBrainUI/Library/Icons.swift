@@ -8,7 +8,7 @@ enum LucideIcon: String, CaseIterable {
     case externalLink = "external-link", folder, copy, trash = "trash-2", chevronsRight = "chevrons-right"
     case chevronDown = "chevron-down", plus, pencil, brain, tag, palette, inbox, hourglass
     case circleCheck = "circle-check", triangleAlert = "triangle-alert", clipboardPaste = "clipboard-paste"
-    case minus, x, globe, settings, keyboard, hardDrive = "hard-drive", arrowDownToLine = "arrow-down-to-line"
+    case minus, x, globe, settings, keyboard, hardDrive = "hard-drive", arrowDownToLine = "arrow-down-to-line", calendar
 
     @MainActor private static var cache: [LucideIcon: NSImage] = [:]
 

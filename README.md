@@ -9,7 +9,7 @@ natural-language search. Everything stays on your Mac: no account, no cloud. (On
 - Menu bar icon only; no Dock icon
 - ⌘V (or the paste button) in the drop box saves the clipboard
 - Library: ⌘-click / ⇧-click / ⌘A to select several items for bulk tag, type or trash
-- Dragging anything from any app pops the drop box up; it hides again after you drop or let go
+- Dragging anything from any app pops the drop box up; it hides again after you drop or let go (except while an app under Settings › General › Excluded Apps is in front, or open)
 - **Custom types** (Settings › Types): e.g. “Products” with your own fields — Text, Large Text,
   Web Link (clickable). Drop onto a type’s zone under “Save to type” in the drop box (or hold ⇧
   while dropping) and fill its fields right there. Filter by type in the library sidebar or search `type:products`; field values are searchable.
@@ -27,6 +27,8 @@ natural-language search. Everything stays on your Mac: no account, no cloud. (On
 | Local enrichment | Background queue: PDF text (PDFKit), OCR (Vision), dominant colors (Core Image). |
 | AI tagging | Apple Intelligence (Foundation Models) suggests tags, category, price and a summary. Falls back to keyword extraction when Apple Intelligence is off. Images get tags from Vision's classifier, or Qwen2.5-VL 3B via MLX when built in. Tags you add always win; AI tags you remove never come back. |
 | Semantic search | `NLContextualEmbedding` vectors in sqlite-vec, fused with full-text results using Reciprocal Rank Fusion (k = 60). |
+| Custom types | Your own types (e.g. Products) with Text / Large Text / Web Link fields; drop onto a type zone or ⇧-drop to choose. |
+| CSV | Import a CSV into a type (one row per item, columns → title/url/tags/image/fields, previewed and validated) from Settings › Types, by dropping a `.csv` on the drop box, or via the API; export any type to CSV (re-importable). |
 | Natural language | Sentence-like queries ("red chairs I saved under 500") are turned into the same structured query via Foundation Models, with a plain full-text fallback. |
 
 ### Search syntax
@@ -38,6 +40,56 @@ after:2024-01-01 before:2024-07-01 color:red meta.price<500 meta.brand=ikea
 
 `type:` accepts text, link, image, pdf (plurals and a few aliases work).
 `after:` is inclusive, `before:` exclusive. Unknown `key:value` pairs are searched as text.
+
+## Local API (Python & scripts)
+
+Full guide: **[PYTHON-API.md](PYTHON-API.md)**.
+
+Settings › **API** turns on a small HTTP API so scripts on this Mac can add and
+search items — including custom types and their fields. It is **off by
+default**, listens on **127.0.0.1 only** (default port 7777), and every request
+except `/health` needs the token (`Authorization: Bearer <token>`). Browser
+requests (an `Origin` header) and non-local `Host` headers are refused.
+
+| Method | Path | What |
+|---|---|---|
+| GET | `/health` | `{"ok": true, "version": …}` (no token needed) |
+| GET | `/types` | custom types and their fields |
+| POST | `/items` | add an item (JSON below) → `201` with the item |
+| GET | `/items?q=…&limit=50` | search (same syntax as the search box) |
+| GET | `/items/{id}` | one item |
+| POST | `/import/csv` | import a CSV (one row per item; validated first) |
+| GET | `/export/csv?type=…` | export as CSV (one column per field) |
+
+`POST /items` body — content is `pdf_base64`, `url`, `text` or `title`;
+`image_base64` alone makes an Image item, and sent together with a url/text it
+becomes that item's picture (cover). Everything is validated before anything
+is saved:
+
+```json
+{"type": "Products", "title": "Sony WH-1000XM5", "url": "amazon.com/dp/B09XS7JWHH",
+ "image_base64": "<base64 jpeg/png>", "fields": {"Price": 349},
+ "tags": ["audio"], "note": "gift idea"}
+```
+
+Errors are `{"error": "…"}` with 400 (bad input, e.g. `"url": "hello world"`,
+unknown field), 401 (token), 403 (browser / host), 404 (unknown type or item).
+
+Python client (standard library only): [`clients/python/minibrain.py`](clients/python/minibrain.py)
+— also inside the app (Settings › API › Show Python Client). It reads the token
+from `~/Library/Application Support/MiniBrain/api-token`.
+
+```python
+import minibrain
+mb = minibrain.MiniBrain()
+mb.types()
+mb.add(type="Products", title="Kindle", url="amazon.com/dp/B0CFPJYX7P",
+       image="kindle.jpg", fields={"Price": 99}, tags=["reading"])  # link + picture
+mb.add(url="www.imdb.com/title/tt2187153/")
+mb.add(image="poster.png", title="Poster")                # image alone = Image item
+mb.add(image="https://example.com/a.jpg", text="Moodboard") # URL downloaded by client
+mb.search("type:Products tag:reading")
+```
 
 ## Building
 

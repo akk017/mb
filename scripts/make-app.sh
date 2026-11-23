@@ -16,6 +16,7 @@ if [ -n "$COMMIT" ] && [ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ]
 plutil -insert MBBuildTime -string "$BUILD_TIME" "$APP/Contents/Info.plist"
 plutil -insert MBGitCommit -string "$COMMIT" "$APP/Contents/Info.plist"
 cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+cp "$ROOT/clients/python/minibrain.py" "$APP/Contents/Resources/minibrain.py"   # Settings › API › Show Python Client
 for b in "$BIN"/*.bundle; do
   case "$(basename "$b")" in *Tests.bundle) continue ;; esac   # test fixtures don't ship
   [ -e "$b" ] && ditto "$b" "$APP/Contents/Resources/$(basename "$b")"

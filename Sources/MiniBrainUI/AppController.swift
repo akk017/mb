@@ -80,6 +80,7 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
     private var dragMonitor: SystemDragMonitor?
     private var autoShow: DropBoxAutoShow?
     private let watchdog = MainThreadWatchdog()
+    private var localAPI: LocalAPIController?
 
     public override init() { super.init() }
 
@@ -112,6 +113,7 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
                     Log.shared.error("Enrichment worker failed to start: \(error)", "enrichment")
                 }
             }
+            startLocalAPI()
         } catch {
             startupError = error.localizedDescription
             Log.shared.error("Startup failed: \(error)")
@@ -125,11 +127,46 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
         if ProcessInfo.processInfo.environment["MINIBRAIN_OPEN_SETTINGS"] != nil { showSettings() } // dev aid
     }
 
+    static func makeCSVTransfer(_ env: AppEnvironment) -> CSVTransfer {
+        let items = ItemInputService(capture: env.capture, repository: env.repository, customTypes: env.customTypes,
+                                     optimizeImages: { AppPreferences.isImageOptimizationEnabled() })
+        let types = env.customTypes
+        return CSVTransfer(
+            importer: CSVImporter(items: items),
+            exporter: CSVExporter(repository: env.repository, customTypes: env.customTypes, blobs: env.blobs),
+            search: SearchService(database: env.database, parser: QueryParser(customTypeExists: { types.exists(named: $0) })))
+    }
+
+    /// Local HTTP API for scripts (Settings › API; off by default).
+    private func startLocalAPI() {
+        let controller = LocalAPIController(preferences: preferences) { [weak self] token in
+            guard let self, let env = self.environment else { return nil }
+            let types = env.customTypes
+            let refresh: @Sendable () -> Void = { [weak self] in
+                Task { @MainActor in self?.libraryModel?.scheduleRefresh() }
+            }
+            return LocalAPI(
+                capture: env.capture, repository: env.repository, customTypes: types,
+                search: SearchService(database: env.database, parser: QueryParser(customTypeExists: { types.exists(named: $0) })),
+                token: token, onChange: refresh,
+                optimizeImages: { AppPreferences.isImageOptimizationEnabled() })
+        }
+        localAPI = controller
+        controller.apply()
+    }
+
     /// Pops the drop box up whenever a drag starts anywhere on the system.
     private func startDragAutoShow() {
         let autoShow = DropBoxAutoShow(
             appState: state,
-            isEnabled: { [preferences] in preferences.autoShowOnDrag },
+            isEnabled: { [preferences] in
+                guard preferences.autoShowOnDrag else { return false }
+                if let app = preferences.dropExclusions.currentBlockingApp() {
+                    Log.shared.info("drag pop-up skipped: \(app.name) is excluded", "dropbox")
+                    return false
+                }
+                return true
+            },
             dropState: { [weak self] in self?.dropBoxModel?.state })
         let monitor = SystemDragMonitor()
         monitor.watcher.onDragStart = { [weak autoShow] in autoShow?.dragStarted() }
@@ -147,6 +184,7 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
 
     public func applicationWillTerminate(_ notification: Notification) {
         Log.shared.info("MiniBrain quitting")
+        localAPI?.stop()
         watchdog.stop()
         Log.shared.flush()
         registrar?.unregisterAll()
@@ -163,6 +201,15 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
         } else {
             dropBoxPanel?.orderOut(nil)
         }
+    }
+
+    public var isDropBoxOnActiveSpace: Bool {
+        guard let panel = dropBoxPanel, panel.isVisible else { return true }
+        guard panel.isOnActiveSpace else { return false }
+        // Also "elsewhere" when it sits on a different display than the pointer.
+        let mouse = NSEvent.mouseLocation
+        guard let pointerScreen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) else { return true }
+        return panel.screen == pointerScreen
     }
 
     public func showDropBoxForDrag() {
@@ -185,6 +232,14 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
             model.onAutoTagChange = { [weak self] on in self?.preferences.autoTag = on }
             model.onSaved = { [weak self] _ in Task { await self?.libraryModel?.refresh() } }
             model.onOpenSettings = { [weak self] in self?.showSettings(tab: .types) }
+            let importer = Self.makeCSVTransfer(env).importer
+            model.csvImport = { [weak self] file, typeName in
+                let report = try importer.importCSV(
+                    CSVTransfer.readText(file),
+                    options: .init(type: typeName, baseDirectory: file.deletingLastPathComponent(), skipInvalid: true))
+                if !report.imported.isEmpty { Task { await self?.libraryModel?.refresh() } }
+                return report
+            }
             dropBoxModel = model
             let panel = DropBoxPanel(content: ThemedRoot(preferences: preferences) { DropBoxView(model: model) })
             panel.anchor = preferences.dropBoxPosition
@@ -270,6 +325,9 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
         if settingsWindow == nil, let shortcutSettings {
             let types = environment.map { env in
                 let model = TypesSettings(repository: env.customTypes)
+                let csv = Self.makeCSVTransfer(env)
+                csv.onImported = { [weak self] in Task { await self?.libraryModel?.refresh() } }
+                model.csv = csv
                 model.onChange = { [weak self] in
                     self?.dropBoxModel?.refreshTypes()
                     Task { await self?.libraryModel?.refresh() }
@@ -303,7 +361,8 @@ public final class AppController: NSObject, NSApplicationDelegate, WindowPresent
                     guard let self, let panel = self.dropBoxPanel, panel.isVisible else { return }
                     panel.reposition(self.preferences.dropBoxPosition)
                 },
-                about: AboutInfo.current(dataDirectory: environment?.paths.baseDirectory))
+                about: AboutInfo.current(dataDirectory: environment?.paths.baseDirectory),
+                localAPI: localAPI)
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 600, height: 420),
                 styleMask: [.titled, .closable], backing: .buffered, defer: false)

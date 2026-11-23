@@ -23,9 +23,13 @@ public struct LibraryFilters: Equatable, Sendable {
     public var color: String?
     public var after: Date?
     public var before: Date?
+    /// Sidebar "Today": items added since local midnight. Resolved when the
+    /// query is built, so it rolls over at midnight.
+    public var addedToday = false
 
     public init(type: ItemType? = nil, customType: String? = nil, tags: [String] = [], color: String? = nil,
-                after: Date? = nil, before: Date? = nil) {
+                after: Date? = nil, before: Date? = nil, addedToday: Bool = false) {
+        self.addedToday = addedToday
         self.type = type
         self.customType = customType
         self.tags = tags
@@ -36,7 +40,7 @@ public struct LibraryFilters: Equatable, Sendable {
 
     public var isEmpty: Bool { self == LibraryFilters() }
 
-    public func queryFragments(timeZone: TimeZone = .current) -> [String] {
+    public func queryFragments(timeZone: TimeZone = .current, now: Date = Date()) -> [String] {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = timeZone
@@ -47,6 +51,7 @@ public struct LibraryFilters: Equatable, Sendable {
         for tag in tags { parts.append(tag.contains(" ") ? "tag:\"\(tag)\"" : "tag:\(tag)") }
         if let color { parts.append("color:\(color)") }
         if let after { parts.append("after:\(f.string(from: after))") }
+        else if addedToday { parts.append("after:\(f.string(from: now))") }
         if let before { parts.append("before:\(f.string(from: before))") }
         return parts
     }
@@ -99,7 +104,7 @@ public final class LibraryViewModel {
     /// The full query sent to search: free text + sidebar filters.
     public var queryString: String {
         let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ([text].filter { !$0.isEmpty } + filters.queryFragments(timeZone: timeZone)).joined(separator: " ")
+        return ([text].filter { !$0.isEmpty } + filters.queryFragments(timeZone: timeZone, now: clock.now)).joined(separator: " ")
     }
 
     /// No items at all (onboarding empty state) vs. a query with no hits.
@@ -169,8 +174,12 @@ public final class LibraryViewModel {
         for id in selectedIDs { try assignCustomType(typeID, to: id) }
     }
 
-    /// Debounced search. Typing restarts the timer.
+    /// Debounced search. Typing restarts the timer; edits that don't change
+    /// the query (extra spaces) don't search again.
     public func scheduleSearch(immediate: Bool = false) {
+        let query = queryString
+        if !immediate, query == lastRequestedQuery { return }
+        lastRequestedQuery = query
         searchTask?.cancel()
         let delay = immediate ? 0 : debounce
         searchTask = Task { [weak self, clock] in
@@ -181,6 +190,12 @@ public final class LibraryViewModel {
             await self?.performSearch()
         }
     }
+
+    /// Return in the search box: skip the wait.
+    public func searchNow() { scheduleSearch(immediate: true) }
+
+    @ObservationIgnored private var lastRequestedQuery: String?
+    var searchTaskForTesting: Task<Void, Never>? { searchTask }
 
     /// Runs the current query now.
     public func performSearch() async {

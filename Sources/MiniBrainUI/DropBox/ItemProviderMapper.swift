@@ -51,6 +51,16 @@ public enum ItemProviderMapper {
         }
     }
 
+    /// The dropped file when it's a single .csv / .tsv (imported as rows, not saved as a note).
+    static func csvFileURL(_ providers: [NSItemProvider]) async -> URL? {
+        guard providers.count == 1, let provider = providers.first,
+              provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier),
+              let url = try? await loadURL(provider, type: .fileURL), url.isFileURL,
+              ["csv", "tsv"].contains(url.pathExtension.lowercased())
+        else { return nil }
+        return url
+    }
+
     static func preferredImageType(_ provider: NSItemProvider) -> UTType? {
         for type in [UTType.png, .jpeg, .heic, .gif, .tiff, .image]
         where provider.hasItemConformingToTypeIdentifier(type.identifier) {

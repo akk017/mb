@@ -121,10 +121,10 @@ struct InlineURLField: View {
                     .textFieldStyle(.plain)
                     .focused($focused)
                     .onSubmit { commit(refocus: true) }
-                    .onExitCommand(perform: cancel)
+                    .onExitCommand { releaseFocus(); cancel() }
                     .onChange(of: focused) { _, isFocused in if !isFocused, editing { commit(refocus: false) } }
                     .onChange(of: draft) { error = nil }
-                    .onAppear { focused = true }
+                    .deferredFocus($focused)
                     .padding(.vertical, 5)
                 if let error {
                     Text(error)
@@ -168,9 +168,14 @@ struct InlineURLField: View {
     /// (nothing is saved). Return keeps the cursor in the field.
     private func commit(refocus: Bool) {
         guard editing else { return }
-        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == value { cancel(); return }
+        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == value {
+            if refocus { releaseFocus() }
+            cancel()
+            return
+        }
         do {
             try onCommit(draft)
+            if refocus { releaseFocus() }
             cancel()
         } catch {
             self.error = error.localizedDescription

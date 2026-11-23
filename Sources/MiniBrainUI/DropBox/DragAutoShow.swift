@@ -139,7 +139,7 @@ public final class DropBoxAutoShow {
     private func hideIfDone() {
         guard appState.isDropBoxShownByDrag else { return } // user pinned it
         switch dropState() {
-        case .saving?, .choosingType?, .editingFields?:
+        case .saving?, .choosingType?, .editingFields?, .choosingImportType?:
             scheduleHide(after: idleHideDelay) // still busy / waiting for the user: check again
         case .saved?, .error?:
             if resultShown {

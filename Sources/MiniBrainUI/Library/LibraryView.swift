@@ -316,6 +316,9 @@ struct LibrarySidebar: View {
                     row("All Items", icon: .layoutGrid, selected: model.filters == LibraryFilters()) {
                         model.filters = LibraryFilters()
                     }
+                    row("Today", icon: .calendar, selected: model.filters.addedToday) {
+                        model.filters.addedToday.toggle()
+                    }
                     ForEach(ItemType.allCases, id: \.self) { type in
                         row(type.displayName, icon: type.icon, selected: model.filters.type == type) {
                             model.filters.type = model.filters.type == type ? nil : type
@@ -433,6 +436,7 @@ struct LibrarySidebar: View {
                 .onKeyPress(.upArrow) { moveCompletion(-1) }
                 .onKeyPress(.tab) { acceptCurrentCompletion() }
                 .onKeyPress(.return) { acceptCurrentCompletion() }
+                .onSubmit { model.searchNow() } // Return with no suggestion: search without waiting
                 .onKeyPress(.escape) {
                     if completions.isEmpty {
                         searchFocused = false // Esc leaves the search box
@@ -1302,10 +1306,10 @@ struct InlineText: View {
                 .textFieldStyle(.plain)
                 .lineLimit(multiline ? 1...12 : 1...1)
                 .focused($focused)
-                .onSubmit(commit)
-                .onExitCommand { editing = false }
+                .onSubmit { releaseFocus(); commit() }
+                .onExitCommand { releaseFocus(); editing = false }
                 .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
-                .onAppear { focused = true }
+                .deferredFocus($focused)
                 .padding(.vertical, 5)
         } else {
             Text(value.isEmpty ? placeholder : value)
@@ -1449,4 +1453,27 @@ struct TagEditor: View {
         current.removeAll { $0 == name }
         onRemove(name)
     }
+}
+
+extension View {
+    /// Focuses a text field that was just swapped in for a label (click to
+    /// edit). Setting focus in `onAppear` runs before AppKit has put the field
+    /// in the window, so the window fell back to its first focusable view —
+    /// the sidebar Search box. Waiting one run-loop pass lets the field take it.
+    func deferredFocus(_ binding: FocusState<Bool>.Binding) -> some View {
+        task {
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(30))
+            binding.wrappedValue = true
+        }
+    }
+}
+
+/// Ends text editing in the key window without handing focus to another
+/// field. Removing a still-focused field (Return / Esc in click-to-edit) made
+/// SwiftUI move focus to the next focusable view: the sidebar Search box.
+@MainActor
+func releaseFocus() {
+    guard let window = NSApp.keyWindow else { return }
+    window.makeFirstResponder(window.contentView)
 }

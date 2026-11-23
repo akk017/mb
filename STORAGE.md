@@ -15,6 +15,7 @@ Code references: `Sources/MiniBrainCore/Storage/`, `Enrichment/`, `Semantic/Vect
 | Files (images, PDFs, previews) | `<library>/blobs/<first 2 hex of hash>/<sha256>.<ext>` |
 | Preferences | `~/Library/Preferences/app.minibrain.MiniBrain.plist` (UserDefaults) |
 | Logs | `~/Library/Application Support/MiniBrain/Logs/minibrain.log` (always here, even when the library is moved) |
+| Local API token | `~/Library/Application Support/MiniBrain/api-token` (mode 0600; created when the API is first turned on; Regenerate replaces it) |
 
 **Choosing the library folder** (`AppPreferences.libraryBaseDirectory`), first match wins:
 1. `MINIBRAIN_DATA_DIR` environment variable (dev/testing).
@@ -267,6 +268,8 @@ Domain `app.minibrain.MiniBrain`.
 | `dockMode` | String | `always` | `always` · `whileWindowsOpen` · `never` |
 | `appearance` | String | `system` | `system` · `light` · `dark` |
 | `accentColor` | String | `default` | `default` · `red` · `orange` · `yellow` · `green` · `cyan` · `blue` · `violet` · `purple` · `pink` · `system` |
+| `localAPI.enabled` | Bool | `false` | Settings › API: local HTTP API on 127.0.0.1 |
+| `localAPI.port` | Int | `7777` | 1024–65535 |
 | `shortcut.toggleDropBox` | Data (JSON `KeyCombo`) | ⇧⌘Space | Empty data = cleared |
 | `shortcut.toggleLibrary` | Data (JSON `KeyCombo`) | ⇧⌘B | Empty data = cleared |
 | `library.detailPanelWidth` | Double | `460` | Saved detail-panel width |

@@ -36,6 +36,8 @@ public final class DropBoxViewModel {
         case choosingType([CustomType])
         /// Saved into a custom type; user fills its fields.
         case editingFields(item: Item, type: CustomType)
+        /// A .csv was dropped: pick the custom type to import its rows into.
+        case choosingImportType(fileName: String, types: [CustomType])
     }
 
     public private(set) var state: State = .idle
@@ -65,6 +67,10 @@ public final class DropBoxViewModel {
     @ObservationIgnored private var pendingPayload: CapturePayload?
     @ObservationIgnored public var onSaved: ((Item) -> Void)?
     @ObservationIgnored public var onOpenSettings: (() -> Void)?
+    /// Imports a CSV file into a type (nil = per-row "type" column), skipping
+    /// bad rows. When nil, a dropped .csv is saved as a text note instead.
+    @ObservationIgnored public var csvImport: (@MainActor (_ file: URL, _ typeName: String?) throws -> CSVImporter.Report)?
+    @ObservationIgnored private var pendingCSV: URL?
 
     public init(capturer: any Capturing, customTypes: CustomTypeRepository? = nil,
                 clock: any MiniBrainCore.Clock = SystemClock()) {
@@ -76,7 +82,7 @@ public final class DropBoxViewModel {
     /// True while the user is choosing a type or filling fields.
     public var isAwaitingInput: Bool {
         switch state {
-        case .choosingType, .editingFields: true
+        case .choosingType, .editingFields, .choosingImportType: true
         default: false
         }
     }
@@ -109,6 +115,9 @@ public final class DropBoxViewModel {
         targetedZones.removeAll()
         hoveredTypeID = nil
         state = .saving
+        if csvImport != nil, let csv = await ItemProviderMapper.csvFileURL(providers) {
+            return importCSV(csv, typeName: type.name)
+        }
         do {
             let payload = try await ItemProviderMapper.payload(from: providers)
             pendingPayload = payload
@@ -128,6 +137,13 @@ public final class DropBoxViewModel {
         targetedZones.removeAll()
         hoveredTypeID = nil
         state = .saving
+        if csvImport != nil, let csv = await ItemProviderMapper.csvFileURL(providers) {
+            resetTask?.cancel()
+            pendingCSV = csv
+            refreshTypes()
+            state = .choosingImportType(fileName: csv.lastPathComponent, types: types)
+            return true
+        }
         do {
             let payload = try await ItemProviderMapper.payload(from: providers)
             if chooseType { return try askForType(payload) }
@@ -182,7 +198,35 @@ public final class DropBoxViewModel {
 
     public func cancelChoice() {
         pendingPayload = nil
+        pendingCSV = nil
         state = .idle
+    }
+
+    /// Imports the dropped CSV into `type` (nil = per-row type column / no type).
+    public func chooseImport(_ type: CustomType?) {
+        guard let csv = pendingCSV else { return }
+        pendingCSV = nil
+        state = .saving
+        _ = importCSV(csv, typeName: type?.name)
+    }
+
+    @discardableResult
+    private func importCSV(_ file: URL, typeName: String?) -> Bool {
+        guard let csvImport else { return false }
+        do {
+            let report = try csvImport(file, typeName)
+            guard !report.imported.isEmpty else {
+                finish(.error(report.errors.first.map { "Row \($0.row): \($0.message)" } ?? "No rows to import"))
+                return false
+            }
+            var title = "\(report.imported.count) item\(report.imported.count == 1 ? "" : "s")" + (typeName.map { " to \($0)" } ?? "")
+            if !report.errors.isEmpty { title += " · \(report.errors.count) skipped" }
+            finish(.saved(title: title))
+            return true
+        } catch {
+            finish(.error((error as? ItemInputError)?.message ?? Self.message(for: error)))
+            return false
+        }
     }
 
     /// Saves the name + field form shown after dropping into a type.

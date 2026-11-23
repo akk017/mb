@@ -16,6 +16,7 @@ public struct SettingsView: View {
     let clearRecognizedText: () throws -> Int
     let onPositionChange: () -> Void
     let about: AboutInfo?
+    let localAPI: LocalAPIController?
     let reveal: (URL) -> Void
 
     public init(preferences: AppPreferences, navigation: SettingsNavigation, shortcuts: ShortcutSettings,
@@ -25,8 +26,10 @@ public struct SettingsView: View {
                 clearRecognizedText: @escaping () throws -> Int = { 0 },
                 onPositionChange: @escaping () -> Void,
                 about: AboutInfo? = nil,
+                localAPI: LocalAPIController? = nil,
                 reveal: @escaping (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }) {
         self.about = about
+        self.localAPI = localAPI
         self.reveal = reveal
         self.preferences = preferences
         self.navigation = navigation
@@ -60,6 +63,11 @@ public struct SettingsView: View {
             }
             .tabItem { Label { Text("Storage") } icon: { Icon(.hardDrive, size: 18) } }
             .tag(SettingsNavigation.Tab.storage)
+            Group {
+                if let localAPI { LocalAPISettingsTab(controller: localAPI, reveal: reveal) } else { unavailable }
+            }
+            .tabItem { Label { Text("API") } icon: { Icon(.globe, size: 18) } }
+            .tag(SettingsNavigation.Tab.api)
             AboutSettingsTab(info: about ?? .current(dataDirectory: nil), reveal: reveal)
                 .tabItem { Label { Text("About") } icon: { Icon(.brain, size: 18) } }
                 .tag(SettingsNavigation.Tab.about)
@@ -158,6 +166,26 @@ struct TypesSettingsTab: View {
                     Text("Press Return to save a name.").font(.caption).foregroundStyle(.secondary)
                 }
             }
+            if let csv = model.csv, let name = model.types.first(where: { $0.id == model.selectedID })?.name {
+                Section {
+                    HStack {
+                        Button("Import CSV…") { model.commit(); csv.chooseAndPreview(typeName: name) }
+                        Button("Export CSV…") { model.commit(); csv.chooseAndExport(typeName: name) }
+                        Spacer()
+                    }
+                    if let message = csv.message {
+                        Text(message).font(.caption).foregroundStyle(csv.isError ? .orange : .secondary)
+                    }
+                } header: {
+                    Text("CSV")
+                } footer: {
+                    Text("One row per item. Columns: title, url, text, note, tags, image (file path) and this type's field names.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .sheet(item: Binding(get: { csv.pending.map(PendingBox.init) }, set: { if $0 == nil { csv.cancel() } })) { box in
+                    CSVImportPreview(pending: box.pending, onImport: { csv.confirm() }, onCancel: { csv.cancel() })
+                }
+            }
         }
         .formStyle(.grouped)
     }
@@ -184,6 +212,12 @@ struct TypesSettingsTab: View {
         }
         .buttonStyle(.borderless)
     }
+}
+
+/// Identifiable wrapper for the CSV preview sheet.
+struct PendingBox: Identifiable {
+    let pending: CSVTransfer.Pending
+    var id: String { pending.fileName + "\(pending.report.totalRows)" }
 }
 
 // MARK: - General
@@ -231,6 +265,7 @@ struct GeneralSettingsTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            ExcludedAppsSection(preferences: preferences)
             Section {
                 Toggle("Fetch previews for links", isOn: $preferences.linkPreviews)
             } header: {

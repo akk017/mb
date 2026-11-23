@@ -30,6 +30,13 @@ public protocol WindowPresenting: AnyObject {
     /// Shows the drop box near the cursor for an in-progress drag.
     func showDropBoxForDrag()
     func setLibraryVisible(_ visible: Bool)
+    /// False when the drop box is up but on another Space (or display) than
+    /// the one the user is looking at.
+    var isDropBoxOnActiveSpace: Bool { get }
+}
+
+public extension WindowPresenting {
+    var isDropBoxOnActiveSpace: Bool { true }
 }
 
 /// Top-level UI state shared by the menu bar, hotkeys, and windows.
@@ -57,6 +64,11 @@ public final class AppState {
         case .toggleDropBox:
             // Hotkey while drag-shown pins it open instead of closing it.
             if isDropBoxShownByDrag { isDropBoxShownByDrag = false; return }
+            // Open on another Space: bring it here instead of hiding it.
+            if isDropBoxVisible, presenter?.isDropBoxOnActiveSpace == false {
+                presenter?.setDropBoxVisible(true)
+                return
+            }
             setDropBoxVisible(!isDropBoxVisible)
         case .toggleLibrary: setLibraryVisible(!isLibraryVisible)
         }

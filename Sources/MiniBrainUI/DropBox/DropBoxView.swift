@@ -15,6 +15,10 @@ public struct DropBoxView: View {
             switch model.state {
             case .choosingType(let types):
                 TypeChooserView(model: model, types: types)
+            case .choosingImportType(let fileName, let types):
+                TypeChooserView(model: model, types: types, title: "Import \(fileName) into…",
+                                noTypeTitle: "Import Without Type", subtitle: "One item per row",
+                                pick: { model.chooseImport($0) })
             case .editingFields(let item, let type):
                 FieldsFormView(model: model, item: item, type: type)
             default:
@@ -232,10 +236,22 @@ struct TypeDropZone: View {
 struct TypeChooserView: View {
     let model: DropBoxViewModel
     let types: [CustomType]
+    var title = "Save as…"
+    var noTypeTitle = "Save Without Type"
+    var subtitle: String?
+    /// nil = the ⇧-drop "save into type" flow.
+    var pick: ((CustomType?) -> Void)?
+
+    private func choose(_ type: CustomType?) {
+        if let pick { pick(type) } else { Task { await model.choose(type) } }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Save as…").font(.headline)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline).lineLimit(2)
+                if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+            }
             if types.isEmpty {
                 Text("No custom types yet. Create one (e.g. “Products”) in Settings › Types.")
                     .font(.callout)
@@ -246,7 +262,7 @@ struct TypeChooserView: View {
                 ScrollView {
                     VStack(spacing: 4) {
                         ForEach(types) { type in
-                            Button { Task { await model.choose(type) } } label: {
+                            Button { choose(type) } label: {
                                 HStack {
                                     Icon(.layers, size: 15)
                                         .foregroundStyle(Theme.accent)
@@ -272,7 +288,7 @@ struct TypeChooserView: View {
                 Button("Cancel", role: .cancel) { model.cancelChoice() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Save Without Type") { Task { await model.choose(nil) } }
+                Button(noTypeTitle) { choose(nil) }
             }
             .controlSize(.small)
         }
@@ -435,8 +451,9 @@ private func focusPanel() {
     DispatchQueue.main.async { NSApp.windows.first { $0 is DropBoxPanel }?.makeKey() }
 }
 
-/// Non-activating floating panel that shows on every Space and over
-/// full-screen apps. Resizes to its content and stays pinned to `anchor`.
+/// Non-activating floating panel that shows on the current Space (every
+/// Space, full-screen apps included), above other apps' windows. Resizes to
+/// its content and stays pinned to `anchor`.
 public final class DropBoxPanel: NSPanel {
     public var anchor: DropBoxPosition = .topRight
     /// ⌘V while the panel is key. Menu-bar apps have no Edit menu, so the
@@ -472,8 +489,7 @@ public final class DropBoxPanel: NSPanel {
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered, defer: false)
         isFloatingPanel = true
-        level = .floating
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        applySpaceBehavior()
         hidesOnDeactivate = false
         backgroundColor = .clear
         isOpaque = false
@@ -514,15 +530,35 @@ public final class DropBoxPanel: NSPanel {
     /// Shows the panel at the chosen spot on the screen with the pointer.
     /// `takeFocus` makes it key (for ⌘V); drags leave focus with the source app.
     public func show(at position: DropBoxPosition, takeFocus: Bool) {
-        reposition(position)
+        applySpaceBehavior()
+        // Still up on another Space/display: take it off there first so it
+        // comes up here instead of the system switching Spaces to it.
+        if isVisible, !isOnActiveSpace { orderOut(nil) }
+        reposition(position, followPointer: true)
         orderFrontRegardless()
+        // Key without activating the app (non-activating panel): activating
+        // would make macOS jump to the Space holding the library/Settings.
         if takeFocus { makeKey() }
     }
 
-    public func reposition(_ position: DropBoxPosition) {
+    /// Always on top (above other apps' floating windows) on whichever Space
+    /// is active. `.canJoinAllSpaces` puts it on the current Space each time
+    /// it's shown; never `.moveToActiveSpace`/`.stationary`, which can leave
+    /// it on the Space where it was first shown.
+    static let spaceBehavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+    static let alwaysOnTopLevel: NSWindow.Level = .statusBar
+
+    private func applySpaceBehavior() {
+        if collectionBehavior != Self.spaceBehavior { collectionBehavior = Self.spaceBehavior }
+        if level != Self.alwaysOnTopLevel { level = Self.alwaysOnTopLevel }
+    }
+
+    /// `followPointer`: use the display with the pointer even if the panel is
+    /// already up elsewhere (showing); otherwise stay on its display (resizes).
+    public func reposition(_ position: DropBoxPosition, followPointer: Bool = false) {
         anchor = position
         let mouse = NSEvent.mouseLocation
-        let screen = (isVisible ? self.screen : nil)
+        let screen = (isVisible && !followPointer ? self.screen : nil)
             ?? NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
         let origin = position.origin(panelSize: frame.size, in: visible)
